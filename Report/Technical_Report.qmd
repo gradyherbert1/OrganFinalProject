@@ -1,0 +1,217 @@
+---
+title: "Who Gets to Live? Statistically Investigating the Necropolitics of Heart, Kidney, and Liver Transplant Allocation"
+author: "Grady Herbert, Sriyash Singhania, Robyn Valverde"
+date: "2025-05-12"
+output: pdf_document
+---
+
+## Abstract
+
+This study aims to investigate potential inequities in the allocation of heart, liver, and kidney transplants in the United States by analyzing their distribution in relation to disease-specific mortality rates across sex and racial groups. Specifically, the analysis addresses three objectives: (1) determining if significant differences exist in average mortality rates from cardiovascular, liver, and kidney diseases by sex and race; (2) assessing disparities in transplant receipients for these organs across sex and racial categories; and (3) identifying demographic groups that receive transplants at disproportionate rates relative to their corresponding disease burdens. To achieve these objectives, one-way ANOVA and Tukey’s HSD post hoc tests were employed. The findings reveal equitable allocation of organs with respect to sex when considering disease burden; however, notable racial disparities emerged, with certain racial groups receiving significantly higher proportions of organs relative to their disease-specific mortality rates, highlighting systemic inequities in transplant allocation.
+
+## Introduction
+
+Organ transplantation represents one of modern medicine’s most remarkable achievements, significantly increasing life expectancy and improving the quality of life for individuals facing severe organ failure. However, the chronic shortage of organ donors creates challenging ethical and practical issues concerning the fair and equitable allocation of these vital resources. Ideally, organ transplantation should be equally accessible to all individuals based solely on medical urgency and disease severity. Yet, in practice, existing social inequalities often influence allocation practices, disproportionately impacting certain populations and raising significant concerns.
+
+Among these social inequalities, differences related to race and sex are particularly significant, as they reveal deeper inherent biases rooted within healthcare practices and institutions. Existing research demonstrates that historically marginalized racial groups, such as Black, Hispanic, and Asian American populations, often face significant barriers to healthcare access, experience higher burdens of disease, and have poorer health outcomes compared to White populations(Bailey et al. 2017; Amin 2021; Park et al. 2022). Similarly, significant disparities exist between sexes, where women and men often encounter different health outcomes and healthcare experiences (Homan, 2019). For instance, cardiovascular disease has disproportionately impacted Black communities, resulting in higher mortality rates compared to White Americans (Washington, 2006), while women frequently experience delayed or inadequate diagnosis and treatment following cardiac events, contributing to higher death rates compared to men (Perez, 2019). These inequities demonstrate the necessity of examining whether transplant allocation practices accurately reflect the true disease burden experienced by various demographic groups.
+
+In light of these disparities and their broader implications, the current study investigates the allocation of heart, liver, and kidney transplants relative to disease-specific mortality rates across sex and racial groups within the United States. Specifically, this research addresses three crucial objectives: (1) evaluating whether significant differences exist in mortality rates from cardiovascular, liver, and kidney diseases by sex and race; (2) assessing whether there are significant disparities in the receipt of transplants for these organs by sex and race; and (3) identifying demographic groups whose rates of transplant receipt are disproportionate relative to their disease-specific mortality burdens. By explicitly highlighting existing disparities and potential inequities, the findings from this study aim to inform policies and interventions that enhance fairness, justice, and equity in organ transplantation practices nationwide.
+
+## Data and Methodology
+
+The data on organ transplantation and disease burden were collected and segmented by sex and race. The primary datasets utilized in this study were sourced from the Centers for Disease Control and Prevention (CDC) and the Health Resources and Services Administration (HRSA). By integrating these two datasets, the three research objectives of this study were comprehensively analyzed, specifically examining disease burden and transplant allocations for heart, liver, and kidney organs.
+
+Data obtained from the Health Resources and Services Administration (HRSA) included yearly information on organ transplant recipients from 2019 through 2024. For this analysis, recipient data were examined by sex (male and female) and by racial group (White, Black, Hispanic, and Asian American) across all years of the data. Due to the rarity of certain transplant procedures, such as kidney-pancreas transplants and pancreas transplants, exhibited considerable missing racial data; consequently, they were excluded from this study. Additionally, insufficient data were available for Native Hawaiian, Native American, and Multiracial populations, restricting the scope of this analysis to White, Black, Hispanic, and Asian American recipients.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig.height: 3
+#| fig.width: 7
+
+cat("Figure 1. HRSA Exploratory Data Analysis: Heart, Liver, and Kidney Transplantations by Sex \n\n")
+
+Plot_Heart_Transplants_Sex <- readRDS("Figures/Plot_Heart_Transplants_Sex.rds")
+Plot_Liver_Transplants_Sex <- readRDS("Figures/Plot_Liver_Transplants_Sex.Rds")
+Plot_Kidney_Transplants_Sex <- readRDS("Figures/Plot_Kidney_Transplants_Sex.Rds")
+
+Plot_Heart_Transplants_Sex
+Plot_Liver_Transplants_Sex
+Plot_Kidney_Transplants_Sex
+```
+
+The disease burden data were sourced from the Centers for Disease Control and Prevention (CDC), covering cardiovascular, liver, and kidney disease mortality from 1997 to 2019. This is consistent with the transplant organs analyzed in the study. Mortality rates were segmented by sex and race for the entire study period. Due to the limitations posed by the HRSA dataset, racial data were limited to White, Black, Hispanic, and Asian American populations. All data segmented by race and sex were expressed as percentages, enabling direct comparisons across groups despite differences in sample sizes.
+
+```{r}
+#| echo: false
+#| warning: false
+#| fig.height: 3
+#| fig.width: 7
+
+cat("Figure 2. CDC Exploratory Data Analysis: Average Cardiovascular, Liver, and Kidney Disease \nMortality Rates by Race \n\n")
+
+Plot_Cardiovascular_Mortality_Race <- readRDS("Figures/Cardio_Disease_Rate.rds")
+Plot_Liver_Mortality_Race <- readRDS("Figures/Plot_Liver_Mortality_Race.Rds")
+Plot_Kidney_Mortality_Race <- readRDS("Figures/Plot_Kidney_Mortality_Race.rds")
+
+Plot_Cardiovascular_Mortality_Race
+Plot_Liver_Mortality_Race
+Plot_Kidney_Mortality_Race
+```
+
+One-way ANOVA and Tukey’s HSD post hoc tests were conducted to identify statistically significant differences in transplant recipient data and disease mortality rates by sex and race. We utilized the Tukey’s Honest Significant Difference method because of its balanced approach, effectively controlling the risk of false-positive results without being overly conservative or liberal. Thus, Tukey's HSD helps in accurately identifying meaningful differences between groups.
+
+These statistical analyses were applied separately to heart, liver, and kidney transplant recipient data as well as cardiovascular, liver, and kidney disease mortality rates. A one-way ANOVA was used to evaluate whether organ transplant allocations differed significantly between males and females, and across racial groups. Given that multiple racial groups were compared, Tukey's HSD post hoc tests were then conducted to identify specific racial group pairs with statistically significant differences, assessed at a 95 percent confidence level.
+
+The same statistical methods were applied to disease burden data. One-way ANOVA tests were performed to identify significant differences in cardiovascular, liver, and kidney disease mortality rates by sex and race. As with the transplant data, ANOVA assessed whether significant differences existed by sex and broadly determined the presence of differences among racial groups. To identify specifically which racial groups significantly differed from one another, Tukey’s HSD post hoc tests were conducted for each racial group pair.
+
+Based on the analyses of transplant recipient and disease burden data, organ allocation was considered equitable if groups experiencing significantly higher disease mortality also received proportionately higher rates of organ transplants. Conversely, inequitable organ distribution was identified if a group with a relatively lower disease burden received disproportionately higher rates of organ transplants compared to others.
+
+## Results
+
+Organ allocation by sex was examined first. One-way ANOVA tests on heart, liver, and kidney organ transplant recipients by sex produced large F-statistics and corresponding P-values less than 0.05. These tests found that significantly more organs were given to males than females. Also, one-way ANOVA tests on cardiovascular, liver, and kidney disease mortality rates by sex produced similarly large F-statistics and low, significant P-values less than 0.05. These tests showed that males have a significantly higher average mortality rate from cardiovascular, liver, and kidney diseases.
+
+```{r}
+#| echo: false
+#| warning: false
+
+cat("Figure 3. Formal Analysis: One-way ANOVA Tests on Heart, Liver, and Kidney \nOrgan Recipients by Sex \n\n")
+ANOVA_Sex <- readRDS("Figures/ANOVA_Sex_Results.rds")
+
+ANOVA_Sex
+
+cat("Figure 4. Formal Analysis: One-way ANOVA Tests on Heart, Liver, and Kidney \nOrgan Recipients by Race \n\n")
+ANOVA_Heart_Race <- readRDS("Figures/ANOVA_Heart_Race.rds")
+ANOVA_Liver_Race <- readRDS("Figures/ANOVA_Liver_Race.rds")
+ANOVA_Kidney_Race <- readRDS("Figures/ANOVA_Kidney_Race.rds")
+
+cat("\nHeart\n")
+ANOVA_Heart_Race
+cat("\nLiver\n")
+ANOVA_Liver_Race
+cat("\nKidney\n")
+ANOVA_Kidney_Race
+```
+
+Despite getting significantly more organs than females, men also experience a significantly larger proportion of the cardiovascular, liver, and kidney disease burden. Because the transplant recipient data align with disease burden data, the analyses indicate that heart, liver, and kidney organs are equitably allocated by sex.
+
+One-way ANOVA tests by race determined if at least one significant difference existed between a pair of racial groups' proportions of organ recipients and average disease mortality rate. These tests produced high F-statistics and significantly low P-values below 0.05, indicating that at least one significant difference existed between racial groups in both the organ recipient and disease burden data.
+
+```{r}
+#| echo: false
+#| warning: false
+
+cat("Figure 5. Formal Analysis: One-way ANOVA Tests on Average Cardiovascular, Liver, and Kidney \nDisease Mortality Rate by Sex \n\n")
+ANOVA_Cardiovascular_Mortality_Sex <- readRDS("Figures/ANOVA_Cardiovascular_Mortality_Sex.rds")
+ANOVA_Liver_Mortality_Sex <- readRDS("Figures/ANOVA_Liver_Mortality_Sex.rds")
+ANOVA_Kidney_Mortality_Sex <- readRDS("Figures/ANOVA_Kidney_Mortality_Sex.rds")
+
+cat("\nHeart\n")
+ANOVA_Cardiovascular_Mortality_Sex
+cat("\nLiver\n")
+ANOVA_Liver_Mortality_Sex
+cat("\nKidney\n")
+ANOVA_Kidney_Mortality_Sex
+
+cat("\n\nFigure 6. Formal Analysis: One-way ANOVA Tests on Average Cardiovascular, Liver, and Kidney \nDisease Mortality Rate by Race \n\n")
+ANOVA_Heart_Mortality <- readRDS("Figures/ANOVA_Heart_Race.rds")
+ANOVA_Liver_Mortality <- readRDS("Figures/ANOVA_Liver_Race.rds")
+ANOVA_Kidney_Mortality <- readRDS("Figures/ANOVA_Kidney_Race.rds")
+
+cat("\nHeart\n")
+ANOVA_Heart_Mortality
+cat("\nLiver\n")
+ANOVA_Liver_Mortality
+cat("\nKidney\n")
+ANOVA_Kidney_Mortality
+```
+
+Tukey’s HSD post hoc tests followed the one-way ANOVA tests to understand the differences among each racial group in organ allocation and disease burden. Tukey’s HSD test for heart organ recipients found that White Americans receive significantly more organs compared to other racial groups, while Asian Americans receive significantly fewer heart transplants. Hispanic Americans received significantly more heart transplants than Asian Americans but significantly less than Black Americans. Tukey’s HSD test for cardiovascular mortality rate shows that Black Americans experience significantly higher average rates of cardiovascular disease mortality than their peers while Asian Americans have significantly lower average mortality rates. Hispanic Americans had a significantly higher share of cardiovascular disease burden than Asian Americans, but it was significantly lower than that of White Americans. These results show that heart organs are fairly allocated to Asian Americans. However, a large number of heart transplants are given to White Americans beyond their proportion of the cardiovascular disease burden at the expense of Black Americans. So, heart organs are unfairly allocated to more White Americans than Black Americans in proportions disproportionate to their share of the disease burden.
+
+```{r}
+#| echo: false
+#| warning: false
+cat("Table 1. Tukey's HSD Test: Heart Transplantations by Race \n\n")
+Tukey_Heart_Transplantations_Race <- readRDS("Figures/Tukey_Heart_Transplantations_Race.rds")
+Tukey_Heart_Transplantations_Race
+```
+
+Tukey’s HSD post hoc tests for liver organ recipients by race found that White Americans received significantly more organs than other groups. Black and Asian Americans received fewer liver organs than their peers, with no significant difference existing between the two groups although Black Americans received more liver organs than Asian Americans. The test results for disease burden show that Hispanic Americans have significantly higher liver disease mortality rates than all other groups while Asian Americans have significantly lower liver disease mortality rates than other groups. Black Americans have a significantly higher proportion of the disease burden than Asian Americans but a significantly lower proportion than White Americans. These results show that, like in heart results, Asian Americans are fairly allocated organs with respect to their share of the disease burden. Organ allocation inequalities exist between White, Black, Hispanic Americans because White Americans receive liver organ transplants at higher proportions than their liver disease mortality rate at the expense of Hispanic and Black Americans.
+
+```{r}
+#| echo: false
+#| warning: false
+cat("Table 2. Tukey's HSD Test: Liver Transplantations by Race \n\n")
+Tukey_Liver_Transplantations_Race <- readRDS("Figures/Tukey_Liver_Transplantations_Race.rds")
+Tukey_Liver_Transplantations_Race
+```
+
+Tukey’s HSD post hoc tests for kidney transplant recipients by race found, like for heart and liver organs, White Americans received a significantly higher proportion and Asian Americans received a significantly lower proportion of kidney organs compared to all of their peers. Black Americans received a slightly larger proportion of kidney transplants than Hispanic Americans, but this difference was insignificant. Post hoc test results on average kidney disease mortality rate found Black Americans had significantly higher mortality rates and Asian Americans had significantly lower mortality rates than all other groups. White Americans had a slightly higher average kidney disease mortality rate than Hispanic Americans, but this difference was statistically insignificant. The results show that Asian and Hispanic Americans received kidney transplants proportionate to their share of the disease burden. However, unfair organ allocation existed as White Americans received a substantially higher number of kidney transplants relative to their proportion of the disease burden. This inequality meant that Black Americans received fewer kidney transplants despite having the highest proportion of the disease burden.
+
+```{r}
+#| echo: false
+#| warning: false
+cat("Table 3. Tukey's HSD Test: Kidney Transplantations by Race \n\n")
+Tukey_Kidney_Transplantations_Race <- readRDS("Figures/Tukey_Kidney_Transplantations_Race.rds")
+Tukey_Kidney_Transplantations_Race
+```
+
+## Diagnostics
+
+Descriptive statistics were calculated to assess the distribution of mortality rates associated with heart, liver, and kidney diseases. For kidneys, we found that Black or African American individuals exhibit the highest average prevalence (mean = 0.0002847), considerably higher than other groups. The high standard deviation (sd = 2.37e-05) suggested noticeable year-to-year variability in kidney disease mortality within this demographic. White individuals showed the second-highest prevalence (mean = 0.000122), a little less than half of that of Black individuals. This is interpreted as a moderate but generally constant kidney disease mortality burden among White people. Consequently, the Hispanic/Latino and Asian/Pacific Islanders experience the lowest average prevalence (means = 0.000118 and 0.0000869), demonstrating a minimal mortality burden from kidney disease.
+
+```{r}
+#| echo: false
+#| warning: false
+cat("Table 4. Descriptive Statistics: Cardiovascular Disease Burden by Race \n\n")
+CardioSummary <- readRDS("Figures/Cardiovascular_Summary.rds")
+CardioSummary
+```
+
+On the other hand, for liver diseases, we found that Hispanic/Latino individuals exhibit the highest average prevalence (mean = 0.0001474), showing a higher disease burden compared to other demographics. The high standard deviation (sd = 9.44e-06) suggested noticeable year-to-year variability in liver disease mortality rate during the observed years. White individuals showed the second-highest prevalence (mean = 0.0000965). The low standard deviation (sd = 1.01e-05) is interpreted as a more stable liver disease mortality rate among White people. Consequently, the Black and Asian/Pacific Islanders experience the lowest average prevalence (means = 0.000118 and 0.0000869), demonstrating a minimal mortality burden from liver  disease.
+
+```{r}
+#| echo: false
+#| warning: false
+cat("Table 5. Descriptive Statistics: Liver Disease Burden by Race \n\n")
+LiverSummary <- readRDS("Figures/Liver_Summary.rds")
+LiverSummary
+```
+
+Lastly, for cardiovascular disease, we found that Black individuals exhibit the highest average prevalence (mean = 0.002543), showing a higher disease burden compared to other demographics. The high standard deviation (sd = 0.000465) suggested noticeable year-to-year variability in cardiovascular disease mortality rate during the observed years. White individuals showed the second-highest prevalence (mean = 0.002049). The moderate standard deviation (sd = 0.000379) is interpreted as a more stable cardiovascular disease mortality rate among White people. Consequently, the Hispanic and Asian/Pacific Islanders experience the lowest average prevalence (means = 0.0015335 and 0.0011016), demonstrating a minimal mortality burden from cardiovascular disease.
+
+```{r}
+#| echo: false
+#| warning: false
+cat("Table 6. Descriptive Statistics: Kidney Disease Burden by Race \n\n")
+KidneySummary <- readRDS("Figures/Kidney_Summary.rds")
+KidneySummary
+```
+
+This analysis employed one-way analysis of variance (ANOVA) and Tukey’s Honest Significant Difference (HSD) tests to evaluate statistical differences in organ transplant allocations and associated disease burdens across sex and racial groups.
+
+A one-way ANOVA test was selected because it effectively identifies statistically significant differences in means across various independent groups. The ANOVA test assesses the extent to which the differences between group means exceed the variation observed within the groups themselves. A significant difference indicates that at least one group's mean is statistically distinct from others, suggesting the need for further pairwise comparisons. To examine disparities among multiple racial and sex-based groups, this method effectively handles multiple comparisons in a simple yet effective manner.
+
+After obtaining significant findings from the ANOVA test, Tukey’s HSD post hoc analysis was conducted to identify exactly which group means differed significantly. Tukey’s HSD comprehensively evaluates all pairwise comparisons among groups, carefully controlling the family-wise error rate to reduce the likelihood of false-positive results. This method was chosen because it balances accuracy and caution, clearly identifying real differences while reducing the chance of false results. Therefore, it fits well with the thorough and exploratory goals of this study.
+
+The diagnostic assumptions required for ANOVA and Tukey’s tests—namely, normality, equal variance, and independence of observations—were examined and satisfied. Normality of residuals was confirmed through Q-Q plots. The equal variance condition was verified using the F-test. The independence of observations was assumed based on the data collection process. Therefore, all the conditions were met, validating the use of one-way ANOVA and Tukey’s tests in the study.
+
+## Limitations and Future Research
+
+While this study provides valuable insights into the racial and sex-based allocation of life-saving organs, the findings presented must be interpreted within the context of several limitations. Firstly, due to the rarity of organ transplantation and missing data in specific demographics, the analysis was limited to heart, liver, and kidney transplants among White, Black, Hispanic, and Asian recipients. Therefore, the exclusion of Native Hawaiian, Native American, multiracial, and intersex populations restricts the generalizability of our results and overlook disparities affecting these underrepresented populations.
+
+Secondly, this study relies on aggregated national data, such as the HRSA and the CDC datasets, intrinsically hiding the disparities at the local or regional level. Essential factors like access to transplantation centers, socioeconomic conditions, and healthcare provision may vary significantly from region to region. Thus, these factors could affect organ allocation practices and outcomes, yet remain unaddressed in the current scope of this study’s analysis.
+
+The statistical methods used in this study, including one-way ANOVA and Tukey’s HSD post hoc tests, are helpful in identifying significant disparities in organ transplantation allocation and disease burden; however, these methods fail to establish cause-and-effect relationships (why these disparities occur?). Consequently, while it confirms the presence of disparity, it overlooks the underlying causes, which limits our ability to propose accurate, targeted interventions and practical policy recommendations.
+
+To address the limitations identified in the analysis, future research should incorporate a more comprehensive dataset that includes underrepresented groups such as the Native Hawaiian, Native American, multiracial, and intersex populations. Furthermore, the studies should include local to regional datasets to identify geographic variations and specific community-level barriers in access to transplantation services.
+
+Lastly, future research should investigate differences in organ quality and source, specifically focusing on outcomes associated with living versus deceased donors, to understand how these factors influence transplant outcomes and disparities. Additionally, examining long-term survival and post-transplant complications could offer valuable information about the impact of donor organ sources on patient outcomes. Moreover, exploring patient experiences using qualitative methods, like interviews or surveys, could uncover critical psychosocial or institutional factors affecting donor availability and patient experiences with transplantation. By utilizing these recommendations, future research can more effectively identify and understand the underlying causes of disparities in organ donation, leading to the development of fair, equitable policies in organ transplantation practices.
+
+## Conclusion
+
+This study aimed to uncover structural inequalities within the United States healthcare system through the lens of organ transplantation. The study consisted of three components: evaluating differences in average cardiovascular, liver, and kidney disease mortality rates by sex and race, assessing disparities in heart, liver, and kidney transplant receipients by sex and race, and identifying the sex and race groups that receive transplants at rates disproportionate to their disease-specific mortality burden.
+
+Statistical tests and analyses show that heart, liver, and kidney organs are fairly distributed by sex. While men receive significantly more heart, liver, and kidney organs than females, males have significantly higher average cardiovascular, liver, and kidney disease mortality rates than females. However, disparities existed by race with White Americans receiving heart, liver, and kidney organs at rates much higher than their mortality burden for cardiovascular, liver, and kidney diseases.
+
+Future research should examine disparities in organ source, specifically among transplant recipients receiving kidney and liver organs from living and deceased donors. Additionally, investigations into organ transplant data by age, payment method, or state in which the transplant occurred could uncover unknown disparities. These questions extend beyond examining how structural societal inequalities manifest in organ transplant data, exploring instead how economic and geographic disparities contribute to inequities in transplant access.
