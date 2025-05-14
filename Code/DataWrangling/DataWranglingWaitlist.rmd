@@ -1,0 +1,944 @@
+---
+title: "320 Project Data Test"
+author: "Grady Herbert"
+date: "2025-05-05"
+output: pdf_document
+---
+
+```{r, setup, include=FALSE}
+library(dplyr)
+library(mosaic)
+library(Amelia)
+library(ggplot2)
+library(tidyr)
+library(kableExtra)
+library(gridExtra)
+library(grid)
+library(readxl)
+```
+
+```{r, include=FALSE}
+recipient_path <- here("Data_Raw", "OrganTransplantData.xlsx")
+recipient <- read_xlsx(recipient_path, sheet = 1)
+
+waitlist_path <- here("Data_Raw", "OrganTransplantData.xlsx")
+waitlist <- read_xlsx(waitlist_path, sheet = 2)
+# Upload file into R Studio for code to run
+# Done by candidate (not registrations) as it represents the number of people waiting for an organ
+# People can register to get an organ at multiple centers and for multiple organs (Duplicate cases)
+# A candidate waiting for multiple organs is tallied once under cohorts where they are waiting for an organ
+```
+
+```{r}
+race_columns <- c("Race: White, Non-Hispanic", 
+                  "Race: Black, Non-Hispanic",
+                  "Race: Asian, Non-Hispanic",
+                  "Race: Hispanic/Latino",
+                  "Race: Amer Ind/Alaska Native, Non-Hispanic",
+                  "Race: Native Hawaiian/other Pacific Islander, Non-Hispanic",
+                  "Race: Multiracial, Non-Hispanic")
+waitlist[race_columns] <- lapply(waitlist[race_columns], function(x) {
+  as.numeric(gsub(",", "", x))
+})
+
+age_columns <- c("Age Group: Pediatric",
+                 "Age Group: 18-30",
+                 "Age Group: 31-40",
+                 "Age Group: 41-50",
+                 "Age Group: 51-60",
+                 "Age Group: 61+")
+waitlist[age_columns] <- lapply(waitlist[age_columns], function(x) {
+  as.numeric(gsub(",", "", ifelse(x == "Suppressed", NA, x)))
+})
+
+payment_columns <- c("Primary Payment: Medicare Advantage",
+                     "Primary Payment: Medicare FFS",
+                     "Primary Payment: Medicaid & CHIP",
+                     "Primary Payment: Other",
+                     "Primary Payment: Private")
+waitlist[payment_columns] <- lapply(waitlist[payment_columns], function(x) {
+  as.numeric(gsub(",", "", ifelse(x == "Suppressed", NA, x)))
+})
+# Converting info to numeric data
+```
+
+## Exploratory Data Analysis (Total Candidates)
+```{r}
+total_candidates <- waitlist %>%
+  filter(`Organ Type` == "All", `Candidate/Registration` == "Candidates") %>%
+  select(`Year of Addition`, Total)
+ggplot(total_candidates, aes(x = `Year of Addition`, y = Total)) +
+  geom_line(linewidth = 1, color = "black") +
+  geom_point(size = 3, color = "orange") +
+  labs(title = "Total Number of Candidates per Year",
+       x = "Year",
+       y = "Number of Candidates") +
+  theme_minimal()
+# Total Candidates Each Year
+```
+
+```{r}
+gender_data <- waitlist %>%
+  filter(`Organ Type` == "All", `Candidate/Registration` == "Candidates") %>%
+  select(`Year of Addition`, `Sex: Female`, `Sex: Male`) %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Female, Male), 
+               names_to = "Gender", 
+               values_to = "Total")
+gender_data <- gender_data %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(gender_data, aes(x = factor(`Year of Addition`), y = Total, fill = Gender)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Total Number of Candidates by Gender per Year",
+       x = "Year",
+       y = "Total Candidates",
+       fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+ggplot(gender_data, aes(x = factor(`Year of Addition`), y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Percentage of Candidates by Gender per Year",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Candidates by Gender Each Year (Totals and Percentage)
+```
+
+```{r}
+race_data <- waitlist %>%
+  filter(`Organ Type` == "All", `Candidate/Registration` == "Candidates") %>%
+  select(`Year of Addition`, 
+         `Race: White, Non-Hispanic`, 
+         `Race: Black, Non-Hispanic`,
+         `Race: Asian, Non-Hispanic`,
+         `Race: Hispanic/Latino`,
+         `Race: Amer Ind/Alaska Native, Non-Hispanic`, 
+         `Race: Native Hawaiian/other Pacific Islander, Non-Hispanic`, 
+         `Race: Multiracial, Non-Hispanic`) %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    White = sum(`Race: White, Non-Hispanic`, na.rm = TRUE),
+    Black = sum(`Race: Black, Non-Hispanic`, na.rm = TRUE),
+    Asian = sum(`Race: Asian, Non-Hispanic`, na.rm = TRUE),
+    Hispanic = sum(`Race: Hispanic/Latino`, na.rm = TRUE),
+    Native_American = sum(`Race: Amer Ind/Alaska Native, Non-Hispanic`, na.rm = TRUE),
+    Pacific_Islander = sum(`Race: Native Hawaiian/other Pacific Islander, Non-Hispanic`, na.rm = TRUE),
+    Multiracial = sum(`Race: Multiracial, Non-Hispanic`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(White, Black, Asian, Hispanic, Native_American, Pacific_Islander, Multiracial), 
+               names_to = "Race", 
+               values_to = "Total")
+race_data <- race_data %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(race_data, aes(x = factor(`Year of Addition`), y = Total, fill = Race)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Total Number of Candidates by Race per Year",
+       x = "Year",
+       y = "Total Candidates",
+       fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+ggplot(race_data, aes(x = factor(`Year of Addition`), y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Percentage of Candidates by Race per Year",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Total Candidates by Race Each Year (Totals and Percentage)
+```
+
+```{r}
+age_data <- waitlist %>%
+  filter(`Organ Type` == "All", `Candidate/Registration` == "Candidates") %>%
+  select(`Year of Addition`, all_of(age_columns)) %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Pediatric = sum(`Age Group: Pediatric`, na.rm = TRUE),
+    Age_18_30 = sum(`Age Group: 18-30`, na.rm = TRUE),
+    Age_31_40 = sum(`Age Group: 31-40`, na.rm = TRUE),
+    Age_41_50 = sum(`Age Group: 41-50`, na.rm = TRUE),
+    Age_51_60 = sum(`Age Group: 51-60`, na.rm = TRUE),
+    Age_61_plus = sum(`Age Group: 61+`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Pediatric, Age_18_30, Age_31_40, Age_41_50, Age_51_60, Age_61_plus),
+               names_to = "Age_Group",
+               values_to = "Total")
+age_data <- age_data %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(age_data, aes(x = factor(`Year of Addition`), y = Total, fill = Age_Group)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Total Number of Candidates by Age Group per Year",
+       x = "Year",
+       y = "Total Candidates",
+       fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+ggplot(age_data, aes(x = factor(`Year of Addition`), y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Percentage of Candidates by Age Group per Year",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Total Candidates by Age Each Year (Totals and Percentage)
+```
+
+```{r}
+payment_data <- waitlist %>%
+  filter(`Organ Type` == "All", `Candidate/Registration` == "Candidates") %>%
+  select(`Year of Addition`, all_of(payment_columns)) %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Primary Payment: Medicare Advantage`, na.rm = TRUE),
+    Medicare_FFS = sum(`Primary Payment: Medicare FFS`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Primary Payment: Medicaid & CHIP`, na.rm = TRUE),
+    Private = sum(`Primary Payment: Private`, na.rm = TRUE),
+    Other = sum(`Primary Payment: Other`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Medicare_Advantage, Medicare_FFS, Medicaid_CHIP, Private, Other),
+               names_to = "Payment_Method",
+               values_to = "Total")
+payment_data <- payment_data %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(payment_data, aes(x = factor(`Year of Addition`), y = Total, fill = Payment_Method)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Total Number of Candidates by Payment Method per Year",
+       x = "Year",
+       y = "Total Candidates",
+       fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+ggplot(payment_data, aes(x = factor(`Year of Addition`), y = Percentage, fill = Payment_Method)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Percentage of Candidates by Payment Method per Year",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Total Candidates by Primary Payment Method Each Year (Totals and Percentage)
+```
+
+
+## Exploratory Data Analysis (By Desired Organ)
+```{r}
+gender_heart <- waitlist %>%
+  filter(`Organ Type` == "Heart", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Female, Male), names_to = "Gender", values_to = "Total")
+ggplot(gender_heart, aes(x = factor(`Year of Addition`), y = Total, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplant Candidates by Gender per Year",
+       x = "Year", y = "Total Candidates", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+race_heart <- waitlist %>%
+  filter(`Organ Type` == "Heart", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(race_columns), names_to = "Race", values_to = "Total")
+ggplot(race_heart, aes(x = factor(`Year of Addition`), y = Total, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplant Candidates by Race per Year",
+       x = "Year", y = "Total Candidates", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_heart <- waitlist %>%
+  filter(`Organ Type` == "Heart", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(age_columns), names_to = "Age_Group", values_to = "Total")
+ggplot(age_heart, aes(x = factor(`Year of Addition`), y = Total, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplant Candidates by Age Group per Year",
+       x = "Year", y = "Total Candidates", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_heart <- waitlist %>%
+  filter(`Organ Type` == "Heart", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(payment_columns), names_to = "Payment_Method", values_to = "Total")
+ggplot(payment_heart, aes(x = factor(`Year of Addition`), y = Total, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplant Candidates by Payment Method per Year",
+       x = "Year", y = "Total Candidates", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Heart Transplant Candidates Each Year by Gender, Race, Age, and Primary Payment Method
+```
+
+```{r}
+gender_kidney <- waitlist %>%
+  filter(`Organ Type` == "Kidney", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Female, Male), names_to = "Gender", values_to = "Total")
+ggplot(gender_kidney, aes(x = factor(`Year of Addition`), y = Total, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplant Candidates by Gender per Year",
+       x = "Year", y = "Total Candidates", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+race_kidney <- waitlist %>%
+  filter(`Organ Type` == "Kidney", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(race_columns), names_to = "Race", values_to = "Total")
+ggplot(race_kidney, aes(x = factor(`Year of Addition`), y = Total, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplant Candidates by Race per Year",
+       x = "Year", y = "Total Candidates", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_kidney <- waitlist %>%
+  filter(`Organ Type` == "Kidney", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(age_columns), names_to = "Age_Group", values_to = "Total")
+ggplot(age_kidney, aes(x = factor(`Year of Addition`), y = Total, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplant Candidates by Age Group per Year",
+       x = "Year", y = "Total Candidates", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_kidney <- waitlist %>%
+  filter(`Organ Type` == "Kidney", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(payment_columns), names_to = "Payment_Method", values_to = "Total")
+ggplot(payment_kidney, aes(x = factor(`Year of Addition`), y = Total, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplant Candidates by Payment Method per Year",
+       x = "Year", y = "Total Candidates", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Kidney Transplant Candidates Each Year by Gender, Race, Age, and Primary Payment Method
+```
+
+```{r}
+gender_kp <- waitlist %>%
+  filter(`Organ Type` == "Kidney-Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Female, Male), names_to = "Gender", values_to = "Total")
+ggplot(gender_kp, aes(x = factor(`Year of Addition`), y = Total, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Candidates by Gender per Year",
+       x = "Year", y = "Total Candidates", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+race_kp <- waitlist %>%
+  filter(`Organ Type` == "Kidney-Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(race_columns), names_to = "Race", values_to = "Total")
+ggplot(race_kp, aes(x = factor(`Year of Addition`), y = Total, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Candidates by Race per Year",
+       x = "Year", y = "Total Candidates", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_kp <- waitlist %>%
+  filter(`Organ Type` == "Kidney-Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(age_columns), names_to = "Age_Group", values_to = "Total")
+ggplot(age_kp, aes(x = factor(`Year of Addition`), y = Total, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Candidates by Age Group per Year",
+       x = "Year", y = "Total Candidates", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_kp <- waitlist %>%
+  filter(`Organ Type` == "Kidney-Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(payment_columns), names_to = "Payment_Method", values_to = "Total")
+ggplot(payment_kp, aes(x = factor(`Year of Addition`), y = Total, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Candidates by Payment Method per Year",
+       x = "Year", y = "Total Candidates", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Kidney-Pancreas Transplant Candidates Each Year by Gender, Race, Age, and Primary Payment Method
+```
+
+```{r}
+gender_liver <- waitlist %>%
+  filter(`Organ Type` == "Liver", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Female, Male), names_to = "Gender", values_to = "Total")
+ggplot(gender_liver, aes(x = factor(`Year of Addition`), y = Total, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplant Candidates by Gender per Year",
+       x = "Year", y = "Total Candidates", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+race_liver <- waitlist %>%
+  filter(`Organ Type` == "Liver", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(race_columns), names_to = "Race", values_to = "Total")
+ggplot(race_liver, aes(x = factor(`Year of Addition`), y = Total, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplant Candidates by Race per Year",
+       x = "Year", y = "Total Candidates", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_liver <- waitlist %>%
+  filter(`Organ Type` == "Liver", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(age_columns), names_to = "Age_Group", values_to = "Total")
+ggplot(age_liver, aes(x = factor(`Year of Addition`), y = Total, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplant Candidates by Age Group per Year",
+       x = "Year", y = "Total Candidates", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_liver <- waitlist %>%
+  filter(`Organ Type` == "Liver", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(payment_columns), names_to = "Payment_Method", values_to = "Total")
+ggplot(payment_liver, aes(x = factor(`Year of Addition`), y = Total, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplant Candidates by Payment Method per Year",
+       x = "Year", y = "Total Candidates", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Liver Transplant Candidates Each Year by Gender, Race, Age, and Primary Payment Method
+```
+
+```{r}
+gender_lung <- waitlist %>%
+  filter(`Organ Type` == "Lung", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Female, Male), names_to = "Gender", values_to = "Total")
+ggplot(gender_lung, aes(x = factor(`Year of Addition`), y = Total, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplant Candidates by Gender per Year",
+       x = "Year", y = "Total Candidates", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+race_lung <- waitlist %>%
+  filter(`Organ Type` == "Lung", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(race_columns), names_to = "Race", values_to = "Total")
+ggplot(race_lung, aes(x = factor(`Year of Addition`), y = Total, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplant Candidates by Race per Year",
+       x = "Year", y = "Total Candidates", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_lung <- waitlist %>%
+  filter(`Organ Type` == "Lung", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(age_columns), names_to = "Age_Group", values_to = "Total")
+ggplot(age_lung, aes(x = factor(`Year of Addition`), y = Total, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplant Candidates by Age Group per Year",
+       x = "Year", y = "Total Candidates", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_lung <- waitlist %>%
+  filter(`Organ Type` == "Lung", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(payment_columns), names_to = "Payment_Method", values_to = "Total")
+ggplot(payment_lung, aes(x = factor(`Year of Addition`), y = Total, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplant Candidates by Payment Method per Year",
+       x = "Year", y = "Total Candidates", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Lung Transplant Candidates Each Year by Gender, Race, Age, and Primary Payment Method
+```
+
+```{r}
+gender_pancreas <- waitlist %>%
+  filter(`Organ Type` == "Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Female, Male), names_to = "Gender", values_to = "Total")
+ggplot(gender_pancreas, aes(x = factor(`Year of Addition`), y = Total, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplant Candidates by Gender per Year",
+       x = "Year", y = "Total Candidates", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+race_pancreas <- waitlist %>%
+  filter(`Organ Type` == "Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(race_columns), names_to = "Race", values_to = "Total")
+ggplot(race_pancreas, aes(x = factor(`Year of Addition`), y = Total, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplant Candidates by Race per Year",
+       x = "Year", y = "Total Candidates", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_pancreas <- waitlist %>%
+  filter(`Organ Type` == "Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(age_columns), names_to = "Age_Group", values_to = "Total")
+ggplot(age_pancreas, aes(x = factor(`Year of Addition`), y = Total, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplant Candidates by Age Group per Year",
+       x = "Year", y = "Total Candidates", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_pancreas <- waitlist %>%
+  filter(`Organ Type` == "Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(payment_columns), names_to = "Payment_Method", values_to = "Total")
+ggplot(payment_pancreas, aes(x = factor(`Year of Addition`), y = Total, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplant Candidates by Payment Method per Year",
+       x = "Year", y = "Total Candidates", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Pancreas Transplant Candidates Each Year by Gender, Race, Age, and Primary Payment Method
+```
+
+
+## Exploratory Data Analysis (By Candidate Category)
+```{r}
+gender_heart_percentage <- waitlist %>%
+  filter(`Organ Type` == "Heart", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Female, Male), names_to = "Gender", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(gender_heart_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplant Candidates by Gender per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+gender_kidney_percentage <- waitlist %>%
+  filter(`Organ Type` == "Kidney", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(Female, Male), names_to = "Gender", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(gender_kidney_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplant Candidates by Gender per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+gender_kp_percentage <- waitlist %>%
+  filter(`Organ Type` == "Kidney-Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(Female, Male), names_to = "Gender", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(gender_kp_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Candidates by Gender per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+gender_liver_percentage <- waitlist %>%
+  filter(`Organ Type` == "Liver", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(Female, Male), names_to = "Gender", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(gender_liver_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplant Candidates by Gender per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+gender_lung_percentage <- waitlist %>%
+  filter(`Organ Type` == "Lung", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(Female, Male), names_to = "Gender", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(gender_lung_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplant Candidates by Gender per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+gender_pancreas_percentage <- waitlist %>%
+  filter(`Organ Type` == "Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(
+    Female = sum(`Sex: Female`, na.rm = TRUE),
+    Male = sum(`Sex: Male`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(Female, Male), names_to = "Gender", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(gender_pancreas_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplant Candidates by Gender per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Gender") +
+  theme_minimal() +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Candidates by Gender Each Year (Percentage)
+```
+
+```{r}
+race_heart_percentage <- waitlist %>%
+  filter(`Organ Type` == "Heart", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(race_columns), names_to = "Race", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(race_heart_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplant Candidates by Race per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+race_kidney_percentage <- waitlist %>%
+  filter(`Organ Type` == "Kidney", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(race_columns), names_to = "Race", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(race_kidney_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplant Candidates by Race per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+race_kp_percentage <- waitlist %>%
+  filter(`Organ Type` == "Kidney-Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(race_columns), names_to = "Race", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(race_kp_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Candidates by Race per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+race_liver_percentage <- waitlist %>%
+  filter(`Organ Type` == "Liver", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(race_columns), names_to = "Race", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(race_liver_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplant Candidates by Race per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+race_lung_percentage <- waitlist %>%
+  filter(`Organ Type` == "Lung", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(race_columns), names_to = "Race", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(race_lung_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplant Candidates by Race per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+race_pancreas_percentage <- waitlist %>%
+  filter(`Organ Type` == "Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(race_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(race_columns), names_to = "Race", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(race_pancreas_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplant Candidates by Race per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Race") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Candidates by Race Each Year (Percentage)
+```
+
+```{r}
+age_heart_percentage <- waitlist %>%
+  filter(`Organ Type` == "Heart", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(age_columns), names_to = "Age_Group", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(age_heart_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplant Candidates by Age Group per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_kidney_percentage <- waitlist %>%
+  filter(`Organ Type` == "Kidney", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(age_columns), names_to = "Age_Group", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(age_kidney_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplant Candidates by Age Group per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_kp_percentage <- waitlist %>%
+  filter(`Organ Type` == "Kidney-Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(age_columns), names_to = "Age_Group", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(age_kp_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Candidates by Age Group per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_liver_percentage <- waitlist %>%
+  filter(`Organ Type` == "Liver", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(age_columns), names_to = "Age_Group", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(age_liver_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplant Candidates by Age Group per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_lung_percentage <- waitlist %>%
+  filter(`Organ Type` == "Lung", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(age_columns), names_to = "Age_Group", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(age_lung_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplant Candidates by Age Group per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+age_pancreas_percentage <- waitlist %>%
+  filter(`Organ Type` == "Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(age_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(age_columns), names_to = "Age_Group", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(age_pancreas_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplant Candidates by Age Group per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Age Group") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Candidates by Age Each Year (Percentage)
+```
+
+```{r}
+payment_heart_percentage <- waitlist %>%
+  filter(`Organ Type` == "Heart", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(cols = all_of(payment_columns), names_to = "Payment_Method", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(payment_heart_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplant Candidates by Payment Method per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_kidney_percentage <- waitlist %>%
+  filter(`Organ Type` == "Kidney", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(payment_columns), names_to = "Payment_Method", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(payment_kidney_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplant Candidates by Payment Method per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_kp_percentage <- waitlist %>%
+  filter(`Organ Type` == "Kidney-Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(payment_columns), names_to = "Payment_Method", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(payment_kp_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Candidates by Payment Method per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_liver_percentage <- waitlist %>%
+  filter(`Organ Type` == "Liver", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(payment_columns), names_to = "Payment_Method", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(payment_liver_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplant Candidates by Payment Method per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_lung_percentage <- waitlist %>%
+  filter(`Organ Type` == "Lung", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(payment_columns), names_to = "Payment_Method", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(payment_lung_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplant Candidates by Payment Method per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+
+payment_pancreas_percentage <- waitlist %>%
+  filter(`Organ Type` == "Pancreas", `Candidate/Registration` == "Candidates") %>%
+  group_by(`Year of Addition`) %>%
+  summarize(across(all_of(payment_columns), ~sum(.x, na.rm = TRUE)), .groups = "drop") %>%
+  pivot_longer(all_of(payment_columns), names_to = "Payment_Method", values_to = "Total") %>%
+  group_by(`Year of Addition`) %>%
+  mutate(Percentage = Total / sum(Total) * 100)
+ggplot(payment_pancreas_percentage, aes(x = factor(`Year of Addition`), y = Percentage, fill = Payment_Method)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplant Candidates by Payment Method per Year (Percentage)",
+       x = "Year", y = "Percentage (%)", fill = "Payment Method") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
+# Candidates by Primary Payment Method Each Year (Percentage)
+```
+

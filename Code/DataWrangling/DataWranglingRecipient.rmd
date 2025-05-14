@@ -1,0 +1,2597 @@
+---
+title: "320 Project Data Test"
+author: "Grady Herbert"
+date: "2025-05-05"
+output: pdf_document
+---
+
+```{r, setup, include=FALSE}
+library(dplyr)
+library(mosaic)
+library(Amelia)
+library(ggplot2)
+library(tidyr)
+library(kableExtra)
+library(gridExtra)
+library(grid)
+library(readxl)
+```
+
+```{r, include=FALSE}
+recipient_path <- here("Data_Raw/Organ_Tranplant", "OrganTransplantData.xlsx")
+recipient <- read_xlsx(recipient_path, sheet = 1)
+
+waitlist_path <- here("Data_Raw/Organ_Tranplant", "OrganTransplantData.xlsx")
+waitlist <- read_xlsx(waitlist_path, sheet = 2)
+# Upload file into R Studio for code to run
+```
+
+```{r, include=FALSE}
+recipient <- recipient %>%
+  mutate(across(c(`White Distinct Recipients`, `Black Distinct Recipients`,
+                  `Hispanic Distinct Recipients`, `Asian Distinct Recipients`,
+                  `American Indian Distinct Recipients`, `Native Hawaiian Distinct Recipients`,
+                  `Multiracial Distinct Recipients`),
+                ~ as.numeric(gsub("[^0-9]", "", .)), .names = "{.col}")) %>%
+  mutate(across(c(`Pediatric Distinct Recipients`, `Age 18-30 Distinct Recipients`,
+                  `Age 31-40 Distinct Recipients`, `Age 41-50 Distinct Recipients`,
+                  `Age 51-60 Distinct Recipients`, `Age 61+ Distinct Recipients`),
+                ~ as.numeric(gsub("[^0-9]", "", .)))) %>%
+  mutate(across(c(`Distinct Recipients with Medicare Advantage Payment Source`,
+                  `Distinct Recipients with Medicare FFS Payment Source`,
+                  `Distinct Recipients with Medicaid and CHIP Payment Source`,
+                  `Distinct Recipients with Private Insurance Payment Source`,
+                  `Distinct Recipients with Other Insurance Payment Sources`),
+                ~ as.numeric(gsub("[^0-9]", "", .))))
+```
+
+## Exploratory Data Analysis (Total Transplants)
+
+```{r}
+yearly_organ_totals <- function(data) {
+  data %>%
+    filter(`Organ Transplanted` != "All Transplanted Organ Types") %>%
+    group_by(`Transplant Year`) %>%
+    summarize(Total_Recipients = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+}
+organ_totals_by_year <- yearly_organ_totals(recipient)
+organ_totals_by_year$`Transplant Year` <- factor(
+  organ_totals_by_year$`Transplant Year`,
+  levels = sort(unique(organ_totals_by_year$`Transplant Year`))
+)
+ggplot(organ_totals_by_year, aes(x = `Transplant Year`, y = Total_Recipients)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Total Number of Organ Transplants per Year",
+       x = "Year",
+       y = "Number of Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Organ Transplants
+```
+
+```{r}
+organ_year_totals <- recipient %>%
+  filter(`Organ Transplanted` != "All Transplanted Organ Types") %>%
+  group_by(`Transplant Year`, `Organ Transplanted`) %>%
+  summarize(Total_Recipients = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+organ_year_totals$`Transplant Year` <- factor(organ_year_totals$`Transplant Year`,
+                                               levels = sort(unique(organ_year_totals$`Transplant Year`)))
+ggplot(organ_year_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = `Organ Transplanted`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Number of Organ Transplants per Year by Organ Type",
+       x = "Year",
+       y = "Total Number of Transplants",
+       fill = "Organ Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Organ Transplants Each Year
+```
+
+```{r}
+organ_year_percentages <- recipient %>%
+  filter(`Organ Transplanted` != "All Transplanted Organ Types") %>%
+  group_by(`Transplant Year`, `Organ Transplanted`) %>%
+  summarize(Total_Recipients = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+
+organ_year_percentages$`Transplant Year` <- factor(organ_year_percentages$`Transplant Year`,
+                                                   levels = sort(unique(organ_year_percentages$`Transplant Year`)))
+
+ggplot(organ_year_percentages, aes(x = `Transplant Year`, y = Percentage, fill = `Organ Transplanted`)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Organ Transplants per Year by Organ Type",
+       x = "Year",
+       y = "Percentage of Transplants (%)",
+       fill = "Organ Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Organ Transplants Each Year (Percentage)
+```
+
+```{r}
+sex_year_totals <- recipient %>%
+  filter(`Organ Transplanted` != "All Transplanted Organ Types") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+
+sex_year_totals$`Transplant Year` <- factor(sex_year_totals$`Transplant Year`,
+                                               levels = sort(unique(sex_year_totals$`Transplant Year`)))
+
+ggplot(sex_year_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Number of Organ Transplants per Year by sex",
+       x = "Year",
+       y = "Total Number of Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Organ Transplants by sex Each Year
+```
+
+```{r}
+sex_year_percentages <- recipient %>%
+  filter(`Organ Transplanted` != "All Transplanted Organ Types") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+
+sex_year_percentages$`Transplant Year` <- factor(sex_year_percentages$`Transplant Year`,
+                                                    levels = sort(unique(sex_year_percentages$`Transplant Year`)))
+
+ggplot(sex_year_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Organ Transplants per Year by sex",
+       x = "Year",
+       y = "Percentage of Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Organ Transplants by sex Each Year (Percentage)
+```
+
+```{r}
+race_year_totals <- recipient %>%
+  filter(`Organ Transplanted` != "All Transplanted Organ Types") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic_Latino = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    Native_American = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+
+race_year_totals$`Transplant Year` <- factor(race_year_totals$`Transplant Year`,
+                                             levels = sort(unique(race_year_totals$`Transplant Year`)))
+
+ggplot(race_year_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Total Number of Organ Transplants per Year by Race",
+       x = "Year",
+       y = "Total Number of Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Organ Transplants by Race Each Year
+```
+
+```{r}
+race_year_percentages <- recipient %>%
+  filter(`Organ Transplanted` != "All Transplanted Organ Types") %>% 
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic_Latino = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    Native_American = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Race", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+
+race_year_percentages$`Transplant Year` <- factor(race_year_percentages$`Transplant Year`,
+                                                  levels = sort(unique(race_year_percentages$`Transplant Year`)))
+
+ggplot(race_year_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Organ Transplants per Year by Race",
+       x = "Year",
+       y = "Percentage of Transplants (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Organ Transplants by Race Each Year (Percentage)
+```
+
+```{r}
+age_year_totals <- recipient %>%
+  filter(`Organ Transplanted` != "All Transplanted Organ Types") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(as.numeric(gsub("[^0-9]", "", `Pediatric Distinct Recipients`)), na.rm = TRUE),
+    Age_18_30 = sum(as.numeric(gsub("[^0-9]", "", `Age 18-30 Distinct Recipients`)), na.rm = TRUE),
+    Age_31_40 = sum(as.numeric(gsub("[^0-9]", "", `Age 31-40 Distinct Recipients`)), na.rm = TRUE),
+    Age_41_50 = sum(as.numeric(gsub("[^0-9]", "", `Age 41-50 Distinct Recipients`)), na.rm = TRUE),
+    Age_51_60 = sum(as.numeric(gsub("[^0-9]", "", `Age 51-60 Distinct Recipients`)), na.rm = TRUE),
+    Age_61_Plus = sum(as.numeric(gsub("[^0-9]", "", `Age 61+ Distinct Recipients`)), na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+age_year_totals$`Transplant Year` <- factor(age_year_totals$`Transplant Year`,
+                                            levels = sort(unique(age_year_totals$`Transplant Year`)))
+ggplot(age_year_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Number of Organ Transplants per Year by Age Group",
+       x = "Year",
+       y = "Total Number of Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Organ Transplants by Age Each Year
+```
+
+```{r}
+age_year_percentages <- recipient %>%
+  filter(`Organ Transplanted` != "All Transplanted Organ Types") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(as.numeric(gsub("[^0-9]", "", `Pediatric Distinct Recipients`)), na.rm = TRUE),
+    Age_18_30 = sum(as.numeric(gsub("[^0-9]", "", `Age 18-30 Distinct Recipients`)), na.rm = TRUE),
+    Age_31_40 = sum(as.numeric(gsub("[^0-9]", "", `Age 31-40 Distinct Recipients`)), na.rm = TRUE),
+    Age_41_50 = sum(as.numeric(gsub("[^0-9]", "", `Age 41-50 Distinct Recipients`)), na.rm = TRUE),
+    Age_51_60 = sum(as.numeric(gsub("[^0-9]", "", `Age 51-60 Distinct Recipients`)), na.rm = TRUE),
+    Age_61_Plus = sum(as.numeric(gsub("[^0-9]", "", `Age 61+ Distinct Recipients`)), na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+
+age_year_percentages$`Transplant Year` <- factor(age_year_percentages$`Transplant Year`,
+                                                 levels = sort(unique(age_year_percentages$`Transplant Year`)))
+
+ggplot(age_year_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Organ Transplants per Year by Age Group",
+       x = "Year",
+       y = "Percentage of Transplants (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Organ Transplants by Age Each Year (Percentage)
+```
+
+```{r}
+payment_year_totals <- recipient %>%
+  filter(`Organ Transplanted` != "All Transplanted Organ Types") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(as.numeric(gsub("[^0-9]", "", `Distinct Recipients with Medicare Advantage Payment Source`)), na.rm = TRUE),
+    Medicare_FFS = sum(as.numeric(gsub("[^0-9]", "", `Distinct Recipients with Medicare FFS Payment Source`)), na.rm = TRUE),
+    Medicaid_CHIP = sum(as.numeric(gsub("[^0-9]", "", `Distinct Recipients with Medicaid and CHIP Payment Source`)), na.rm = TRUE),
+    Private_Insurance = sum(as.numeric(gsub("[^0-9]", "", `Distinct Recipients with Private Insurance Payment Source`)), na.rm = TRUE),
+    Other_Insurance = sum(as.numeric(gsub("[^0-9]", "", `Distinct Recipients with Other Insurance Payment Sources`)), na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+
+payment_year_totals$`Transplant Year` <- factor(payment_year_totals$`Transplant Year`,
+                                                levels = sort(unique(payment_year_totals$`Transplant Year`)))
+
+ggplot(payment_year_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Number of Organ Transplants per Year by Payment Source",
+       x = "Year",
+       y = "Total Number of Transplants",
+       fill = "Payment Source") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Organ Transplants by Payment Source Each Year
+```
+
+
+## Exploratory Data Analysis (By Recipient Organ)
+
+```{r}
+heart_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_Heart_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+
+heart_year_totals$`Transplant Year` <- factor(heart_year_totals$`Transplant Year`,
+                                              levels = sort(unique(heart_year_totals$`Transplant Year`)))
+
+ggplot(heart_year_totals, aes(x = `Transplant Year`, y = Total_Heart_Transplants)) +
+  geom_bar(stat = "identity", fill = "tomato") +
+  labs(title = "Total Number of Heart Transplants per Year",
+       x = "Year",
+       y = "Total Heart Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Heart Transplants Each Year
+
+heart_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+heart_sex_totals$`Transplant Year` <- factor(heart_sex_totals$`Transplant Year`,
+                                                levels = sort(unique(heart_sex_totals$`Transplant Year`)))
+ggplot(heart_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplants per Year by sex",
+       x = "Year",
+       y = "Number of Heart Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Heart Transplants by sex Each Year
+
+heart_sex_percentages <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+heart_sex_percentages$`Transplant Year` <- factor(heart_sex_percentages$`Transplant Year`,
+                                                     levels = sort(unique(heart_sex_percentages$`Transplant Year`)))
+ggplot(heart_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Heart Transplants per Year by sex",
+       x = "Year",
+       y = "Percentage of Heart Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Heart Transplants by sex Each Year (Percentage)
+
+heart_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic_Latino = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    Native_American = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+
+heart_race_totals$`Transplant Year` <- factor(heart_race_totals$`Transplant Year`,
+                                              levels = sort(unique(heart_race_totals$`Transplant Year`)))
+ggplot(heart_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplants per Year by Race",
+       x = "Year",
+       y = "Number of Heart Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Heart Transplants by Race Each Year
+
+heart_race_percentages <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic_Latino = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    Native_American = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Race", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+heart_race_percentages$`Transplant Year` <- factor(heart_race_percentages$`Transplant Year`,
+                                                   levels = sort(unique(heart_race_percentages$`Transplant Year`)))
+ggplot(heart_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Heart Transplants per Year by Race",
+       x = "Year",
+       y = "Percentage of Heart Transplants (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Heart Transplants by Race Each Year (Percentage)
+
+heart_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+heart_age_totals$`Transplant Year` <- factor(heart_age_totals$`Transplant Year`,
+                                             levels = sort(unique(heart_age_totals$`Transplant Year`)))
+ggplot(heart_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplants per Year by Age Group",
+       x = "Year",
+       y = "Number of Heart Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Heart Transplants by Age Each Year
+
+heart_age_percentages <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+heart_age_percentages$`Transplant Year` <- factor(heart_age_percentages$`Transplant Year`,
+                                                  levels = sort(unique(heart_age_percentages$`Transplant Year`)))
+ggplot(heart_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Heart Transplants per Year by Age Group",
+       x = "Year",
+       y = "Percentage of Heart Transplants (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Heart Transplants by Age Each Year (Percentage)
+
+heart_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+heart_payment_totals$`Transplant Year` <- factor(heart_payment_totals$`Transplant Year`,
+                                                 levels = sort(unique(heart_payment_totals$`Transplant Year`)))
+ggplot(heart_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Heart Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Number of Heart Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Heart Transplants by Payment Method Each Year
+
+heart_payment_percentages <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+heart_payment_percentages$`Transplant Year` <- factor(heart_payment_percentages$`Transplant Year`,
+                                                      levels = sort(unique(heart_payment_percentages$`Transplant Year`)))
+ggplot(heart_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Heart Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Percentage of Heart Transplants (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Heart Transplants by Payment Method Each Year (Percentage)
+```
+
+```{r}
+lung_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Lung") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_Lung_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+
+lung_year_totals$`Transplant Year` <- factor(lung_year_totals$`Transplant Year`,
+                                             levels = sort(unique(lung_year_totals$`Transplant Year`)))
+ggplot(lung_year_totals, aes(x = `Transplant Year`, y = Total_Lung_Transplants)) +
+  geom_bar(stat = "identity", fill = "lightseagreen") +
+  labs(title = "Total Number of Lung Transplants per Year",
+       x = "Year",
+       y = "Total Lung Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Lung Transplants Each Year
+
+lung_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Lung") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+
+lung_sex_totals$`Transplant Year` <- factor(lung_sex_totals$`Transplant Year`,
+                                               levels = sort(unique(lung_sex_totals$`Transplant Year`)))
+ggplot(lung_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplants per Year by sex",
+       x = "Year",
+       y = "Number of Lung Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Lung Transplants by sex Each Year
+
+lung_sex_percentages <- lung_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(lung_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Lung Transplants per Year by sex",
+       x = "Year",
+       y = "Percentage of Lung Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Lung Transplants by sex Each Year (Percentage)
+
+lung_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Lung") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic_Latino = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    Native_American = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+lung_race_totals$`Transplant Year` <- factor(lung_race_totals$`Transplant Year`,
+                                             levels = sort(unique(lung_race_totals$`Transplant Year`)))
+ggplot(lung_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplants per Year by Race",
+       x = "Year",
+       y = "Number of Lung Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Lung Transplants by Race Each Year
+
+lung_race_percentages <- lung_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(lung_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Lung Transplants per Year by Race",
+       x = "Year",
+       y = "Percentage of Lung Transplants (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Lung Transplants by Race Each Year (Percentage)
+
+lung_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Lung") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+lung_age_totals$`Transplant Year` <- factor(lung_age_totals$`Transplant Year`,
+                                            levels = sort(unique(lung_age_totals$`Transplant Year`)))
+ggplot(lung_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplants per Year by Age Group",
+       x = "Year",
+       y = "Number of Lung Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Lung Transplants by Age Each Year
+
+lung_age_percentages <- lung_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(lung_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Lung Transplants per Year by Age Group",
+       x = "Year",
+       y = "Percentage of Lung Transplants (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Lung Transplants by Age Each Year (Percentage)
+
+lung_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Lung") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+
+lung_payment_totals$`Transplant Year` <- factor(lung_payment_totals$`Transplant Year`,
+                                                levels = sort(unique(lung_payment_totals$`Transplant Year`)))
+ggplot(lung_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Lung Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Number of Lung Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Lung Transplants by Payment Method Each Year
+
+lung_payment_percentages <- lung_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(lung_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Lung Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Percentage of Lung Transplants (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Lung Transplants by Payment Method Each Year (Percentage)
+```
+
+```{r}
+pancreas_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_Pancreas_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+pancreas_year_totals$`Transplant Year` <- factor(pancreas_year_totals$`Transplant Year`,
+                                                 levels = sort(unique(pancreas_year_totals$`Transplant Year`)))
+ggplot(pancreas_year_totals, aes(x = `Transplant Year`, y = Total_Pancreas_Transplants)) +
+  geom_bar(stat = "identity", fill = "orchid") +
+  labs(title = "Total Number of Pancreas Transplants per Year",
+       x = "Year",
+       y = "Total Pancreas Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Pancreas Transplants Each Year
+
+pancreas_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+pancreas_sex_totals$`Transplant Year` <- factor(pancreas_sex_totals$`Transplant Year`,
+                                                   levels = sort(unique(pancreas_sex_totals$`Transplant Year`)))
+ggplot(pancreas_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplants per Year by sex",
+       x = "Year",
+       y = "Number of Pancreas Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Pancreas Transplants by sex Each Year
+
+pancreas_sex_percentages <- pancreas_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(pancreas_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Pancreas Transplants per Year by sex",
+       x = "Year",
+       y = "Percentage of Pancreas Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Pancreas Transplants by sex Each Year (Percentage)
+
+pancreas_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic_Latino = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    Native_American = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+pancreas_race_totals$`Transplant Year` <- factor(pancreas_race_totals$`Transplant Year`,
+                                                 levels = sort(unique(pancreas_race_totals$`Transplant Year`)))
+ggplot(pancreas_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplants per Year by Race",
+       x = "Year",
+       y = "Number of Pancreas Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Pancreas Transplants by Race Each Year
+
+pancreas_race_percentages <- pancreas_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(pancreas_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Pancreas Transplants per Year by Race",
+       x = "Year",
+       y = "Percentage of Pancreas Transplants (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Pancreas Transplants by Race Each Year (Percentage)
+
+pancreas_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+pancreas_age_totals$`Transplant Year` <- factor(pancreas_age_totals$`Transplant Year`,
+                                                levels = sort(unique(pancreas_age_totals$`Transplant Year`)))
+ggplot(pancreas_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplants per Year by Age Group",
+       x = "Year",
+       y = "Number of Pancreas Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Pancreas Transplants by Age Each Year
+
+pancreas_age_percentages <- pancreas_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(pancreas_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Pancreas Transplants per Year by Age Group",
+       x = "Year",
+       y = "Percentage of Pancreas Transplants (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Pancreas Transplants by Age Each Year (Percentage)
+
+pancreas_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+pancreas_payment_totals$`Transplant Year` <- factor(pancreas_payment_totals$`Transplant Year`,
+                                                    levels = sort(unique(pancreas_payment_totals$`Transplant Year`)))
+ggplot(pancreas_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Pancreas Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Number of Pancreas Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Pancreas Transplants by Payment Method Each Year
+
+pancreas_payment_percentages <- pancreas_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(pancreas_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Pancreas Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Percentage of Pancreas Transplants (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Pancreas Transplants by Payment Method Each Year (Percentage)
+```
+
+```{r}
+kp_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney-Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_KP_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+kp_year_totals$`Transplant Year` <- factor(kp_year_totals$`Transplant Year`,
+                                           levels = sort(unique(kp_year_totals$`Transplant Year`)))
+ggplot(kp_year_totals, aes(x = `Transplant Year`, y = Total_KP_Transplants)) +
+  geom_bar(stat = "identity", fill = "seagreen") +
+  labs(title = "Total Number of Kidney-Pancreas Transplants per Year",
+       x = "Year",
+       y = "Total Kidney-Pancreas Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Kidney-Pancreas Transplants Each Year
+
+kp_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney-Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+kp_sex_totals$`Transplant Year` <- factor(kp_sex_totals$`Transplant Year`,
+                                             levels = sort(unique(kp_sex_totals$`Transplant Year`)))
+ggplot(kp_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Transplants per Year by sex",
+       x = "Year",
+       y = "Number of Kidney-Pancreas Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Kidney-Pancreas Transplants by sex Each Year
+
+kp_sex_percentages <- kp_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kp_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney-Pancreas Transplants per Year by sex",
+       x = "Year",
+       y = "Percentage of Kidney-Pancreas Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Kidney-Pancreas Transplants by sex Each Year (Percentage)
+
+kp_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney-Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic_Latino = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    Native_American = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+kp_race_totals$`Transplant Year` <- factor(kp_race_totals$`Transplant Year`,
+                                           levels = sort(unique(kp_race_totals$`Transplant Year`)))
+ggplot(kp_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Transplants per Year by Race",
+       x = "Year",
+       y = "Number of Kidney-Pancreas Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Kidney-Pancreas Transplants by Race Each Year
+
+kp_race_percentages <- kp_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kp_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney-Pancreas Transplants per Year by Race",
+       x = "Year",
+       y = "Percentage of Kidney-Pancreas Transplants (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Kidney-Pancreas Transplants by Race Each Year (Percentage)
+
+kp_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney-Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+kp_age_totals$`Transplant Year` <- factor(kp_age_totals$`Transplant Year`,
+                                          levels = sort(unique(kp_age_totals$`Transplant Year`)))
+ggplot(kp_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Transplants per Year by Age Group",
+       x = "Year",
+       y = "Number of Kidney-Pancreas Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Kidney-Pancreas Transplants by Age Each Year
+
+kp_age_percentages <- kp_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+kp_age_percentages$`Transplant Year` <- factor(kp_age_percentages$`Transplant Year`,
+                                               levels = sort(unique(kp_age_percentages$`Transplant Year`)))
+ggplot(kp_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney-Pancreas Transplants per Year by Age Group",
+       x = "Year",
+       y = "Percentage of Kidney-Pancreas Transplants (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Kidney-Pancreas Transplants by Age Each Year (Percentage)
+
+kp_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney-Pancreas") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+kp_payment_totals$`Transplant Year` <- factor(kp_payment_totals$`Transplant Year`,
+                                              levels = sort(unique(kp_payment_totals$`Transplant Year`)))
+ggplot(kp_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney-Pancreas Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Number of Kidney-Pancreas Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Kidney-Pancreas Transplants by Payment Method Each Year
+
+kp_payment_percentages <- kp_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+kp_payment_percentages$`Transplant Year` <- factor(kp_payment_percentages$`Transplant Year`,
+                                                   levels = sort(unique(kp_payment_percentages$`Transplant Year`)))
+ggplot(kp_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney-Pancreas Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Percentage of Kidney-Pancreas Transplants (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Kidney-Pancreas Transplants by Payment Method Each Year (Percentage)
+```
+
+```{r}
+kidney_deceased_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_Kidney_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+kidney_deceased_year_totals$`Transplant Year` <- factor(kidney_deceased_year_totals$`Transplant Year`,
+                                                        levels = sort(unique(kidney_deceased_year_totals$`Transplant Year`)))
+ggplot(kidney_deceased_year_totals, aes(x = `Transplant Year`, y = Total_Kidney_Transplants)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Total Kidney Transplants (Deceased Donors) per Year",
+       x = "Year",
+       y = "Total Kidney Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Deceased Donor Kidney Transplants Each Year
+
+kidney_deceased_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+kidney_deceased_sex_totals$`Transplant Year` <- factor(kidney_deceased_sex_totals$`Transplant Year`,
+                                                          levels = sort(unique(kidney_deceased_sex_totals$`Transplant Year`)))
+ggplot(kidney_deceased_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants (Deceased Donors) per Year by sex",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Deceased Donor Kidney Transplants by sex Each Year
+
+kidney_deceased_sex_percentages <- kidney_deceased_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_deceased_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Deceased Donors) per Year by sex",
+       x = "Year",
+       y = "Percentage of Kidney Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Deceased Donor Kidney Transplants by sex Each Year (Percentage)
+
+kidney_deceased_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    American_Indian = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+kidney_deceased_race_totals$`Transplant Year` <- factor(kidney_deceased_race_totals$`Transplant Year`,
+                                                        levels = sort(unique(kidney_deceased_race_totals$`Transplant Year`)))
+ggplot(kidney_deceased_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants (Deceased Donors) per Year by Race",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Kidney Transplants by Race Each Year
+
+kidney_deceased_race_percentages <- kidney_deceased_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_deceased_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Deceased Donors) by Race",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Kidney Transplants by Race Each Year (Percentage)
+
+kidney_deceased_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+kidney_deceased_age_totals$`Transplant Year` <- factor(kidney_deceased_age_totals$`Transplant Year`,
+                                                       levels = sort(unique(kidney_deceased_age_totals$`Transplant Year`)))
+ggplot(kidney_deceased_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants (Deceased Donors) per Year by Age Group",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Kidney Transplants by Age Each Year
+
+kidney_deceased_age_percentages <- kidney_deceased_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_deceased_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Deceased Donors) by Age Group",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Kidney Transplants by Age Each Year (Percentage)
+
+kidney_deceased_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+kidney_deceased_payment_totals$`Transplant Year` <- factor(kidney_deceased_payment_totals$`Transplant Year`,
+                                                           levels = sort(unique(kidney_deceased_payment_totals$`Transplant Year`)))
+ggplot(kidney_deceased_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants (Deceased Donors) per Year by Payment Method",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Kidney Transplants by Payment Method Each Year
+
+kidney_deceased_payment_percentages <- kidney_deceased_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_deceased_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Deceased Donors) by Payment Method",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Kidney Transplants by Payment Method Each Year (Percentage)
+```
+
+```{r}
+kidney_living_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_Kidney_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+kidney_living_year_totals$`Transplant Year` <- factor(kidney_living_year_totals$`Transplant Year`,
+                                                      levels = sort(unique(kidney_living_year_totals$`Transplant Year`)))
+ggplot(kidney_living_year_totals, aes(x = `Transplant Year`, y = Total_Kidney_Transplants)) +
+  geom_bar(stat = "identity", fill = "darkorange") +
+  labs(title = "Total Kidney Transplants (Living Donors) per Year",
+       x = "Year",
+       y = "Total Kidney Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Living Donor Kidney Transplants Each Year
+
+kidney_living_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+kidney_living_sex_totals$`Transplant Year` <- factor(kidney_living_sex_totals$`Transplant Year`,
+                                                        levels = sort(unique(kidney_living_sex_totals$`Transplant Year`)))
+ggplot(kidney_living_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants (Living Donors) per Year by sex",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Living Donor Kidney Transplants by sex Each Year
+
+kidney_living_sex_percentages <- kidney_living_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_living_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Living Donors) per Year by sex",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Living Donor Kidney Transplants by sex Each Year (Percentage)
+
+kidney_living_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    American_Indian = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+kidney_living_race_totals$`Transplant Year` <- factor(kidney_living_race_totals$`Transplant Year`,
+                                                      levels = sort(unique(kidney_living_race_totals$`Transplant Year`)))
+ggplot(kidney_living_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants (Living Donors) per Year by Race",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Kidney Transplants by Race Each Year
+
+kidney_living_race_percentages <- kidney_living_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_living_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Living Donors) per Year by Race",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Kidney Transplants by Race Each Year (Percentage)
+
+kidney_living_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+kidney_living_age_totals$`Transplant Year` <- factor(kidney_living_age_totals$`Transplant Year`,
+                                                     levels = sort(unique(kidney_living_age_totals$`Transplant Year`)))
+ggplot(kidney_living_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants (Living Donors) per Year by Age Group",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Kidney Transplants by Age Each Year
+
+kidney_living_age_percentages <- kidney_living_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_living_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Living Donors) per Year by Age Group",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Kidney Transplants by Age Each Year (Percentage)
+
+kidney_living_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+kidney_living_payment_totals$`Transplant Year` <- factor(kidney_living_payment_totals$`Transplant Year`,
+                                                         levels = sort(unique(kidney_living_payment_totals$`Transplant Year`)))
+ggplot(kidney_living_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants (Living Donors) per Year by Payment Method",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Kidney Transplants by Payment Method Each Year
+
+kidney_living_payment_percentages <- kidney_living_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_living_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Living Donors) per Year by Payment Method",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Kidney Transplants by Payment Method Each Year (Percentage)
+```
+
+```{r}
+kidney_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_Kidney_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+kidney_year_totals$`Transplant Year` <- factor(kidney_year_totals$`Transplant Year`,
+                                               levels = sort(unique(kidney_year_totals$`Transplant Year`)))
+ggplot(kidney_year_totals, aes(x = `Transplant Year`, y = Total_Kidney_Transplants)) +
+  geom_bar(stat = "identity", fill = "mediumseagreen") +
+  labs(title = "Total Kidney Transplants per Year (Combined Donors)",
+       x = "Year",
+       y = "Total Kidney Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Combined Donor Kidney Transplants Each Year
+
+kidney_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+kidney_sex_totals$`Transplant Year` <- factor(kidney_sex_totals$`Transplant Year`,
+                                                 levels = sort(unique(kidney_sex_totals$`Transplant Year`)))
+ggplot(kidney_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants per Year by sex (Combined Donors)",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Combined Donor Kidney Transplants by sex Each Year
+
+kidney_sex_percentages <- kidney_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants per Year by sex (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Combined Donor Kidney Transplants by sex Each Year (Percentage)
+
+kidney_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    American_Indian = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+kidney_race_totals$`Transplant Year` <- factor(kidney_race_totals$`Transplant Year`,
+                                               levels = sort(unique(kidney_race_totals$`Transplant Year`)))
+ggplot(kidney_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants per Year by Race (Combined Donors)",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Kidney Transplants by Race Each Year
+
+kidney_race_percentages <- kidney_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants per Year by Race (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Kidney Transplants by Race Each Year (Percentage)
+
+kidney_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+kidney_age_totals$`Transplant Year` <- factor(kidney_age_totals$`Transplant Year`,
+                                              levels = sort(unique(kidney_age_totals$`Transplant Year`)))
+ggplot(kidney_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants per Year by Age Group (Combined Donors)",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Kidney Transplants by Age Each Year
+
+kidney_age_percentages <- kidney_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants per Year by Age Group (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Kidney Transplants by Age Each Year (Percentage)
+
+kidney_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+kidney_payment_totals$`Transplant Year` <- factor(kidney_payment_totals$`Transplant Year`,
+                                                  levels = sort(unique(kidney_payment_totals$`Transplant Year`)))
+ggplot(kidney_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Kidney Transplants per Year by Payment Method (Combined Donors)",
+       x = "Year",
+       y = "Number of Kidney Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Kidney Transplants by Payment Method Each Year
+
+kidney_payment_percentages <- kidney_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants per Year by Payment Method (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Kidney Transplants by Payment Method Each Year (Percentage)
+```
+
+```{r}
+liver_deceased_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_Liver_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+liver_deceased_year_totals$`Transplant Year` <- factor(liver_deceased_year_totals$`Transplant Year`,
+                                                       levels = sort(unique(liver_deceased_year_totals$`Transplant Year`)))
+ggplot(liver_deceased_year_totals, aes(x = `Transplant Year`, y = Total_Liver_Transplants)) +
+  geom_bar(stat = "identity", fill = "darkcyan") +
+  labs(title = "Total Liver Transplants (Deceased Donors) per Year",
+       x = "Year",
+       y = "Total Liver Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Deceased Donor Liver Transplants Each Year
+
+liver_deceased_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+liver_deceased_sex_totals$`Transplant Year` <- factor(liver_deceased_sex_totals$`Transplant Year`,
+                                                levels = sort(unique(liver_deceased_sex_totals$`Transplant Year`)))
+ggplot(liver_deceased_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants (Deceased Donors) per Year by sex",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Deceased Donor Liver Transplants by sex Each Year
+
+liver_deceased_sex_percentages <- liver_deceased_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_deceased_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Deceased Donors) by sex",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Deceased Donor Liver Transplants by sex Each Year (Percentage)
+
+liver_deceased_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    American_Indian = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+liver_deceased_race_totals$`Transplant Year` <- factor(liver_deceased_race_totals$`Transplant Year`,
+                                              levels = sort(unique(liver_deceased_race_totals$`Transplant Year`)))
+ggplot(liver_deceased_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants (Deceased Donors) per Year by Race",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Liver Transplants by Race Each Year
+
+liver_deceased_race_percentages <- liver_deceased_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_deceased_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Deceased Donors) by Race",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Liver Transplants by Race Each Year (Percentage)
+
+liver_deceased_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+liver_deceased_age_totals$`Transplant Year` <- factor(liver_deceased_age_totals$`Transplant Year`,
+                                             levels = sort(unique(liver_deceased_age_totals$`Transplant Year`)))
+ggplot(liver_deceased_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants (Deceased Donors) per Year by Age Group",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Liver Transplants by Age Each Year
+
+liver_deceased_age_percentages <- liver_deceased_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_deceased_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Deceased Donors) by Age Group",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Liver Transplants by Age Each Year (Percentage)
+
+liver_deceased_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Deceased Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+liver_deceased_payment_totals$`Transplant Year` <- factor(liver_deceased_payment_totals$`Transplant Year`,
+                                                 levels = sort(unique(liver_deceased_payment_totals$`Transplant Year`)))
+ggplot(liver_deceased_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants (Deceased Donors) per Year by Payment Method",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Liver Transplants by Payment Method Each Year
+
+liver_deceased_payment_percentages <- liver_deceased_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_deceased_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Deceased Donors) by Payment Method",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Deceased Donor Liver Transplants by Payment Method Each Year (Percentage)
+```
+
+```{r}
+liver_living_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_Liver_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+liver_living_year_totals$`Transplant Year` <- factor(liver_living_year_totals$`Transplant Year`,
+                                                     levels = sort(unique(liver_living_year_totals$`Transplant Year`)))
+ggplot(liver_living_year_totals, aes(x = `Transplant Year`, y = Total_Liver_Transplants)) +
+  geom_bar(stat = "identity", fill = "goldenrod") +
+  labs(title = "Total Liver Transplants (Living Donors) per Year",
+       x = "Year",
+       y = "Total Liver Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Living Donor Liver Transplants Each Year
+
+liver_living_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+liver_living_sex_totals$`Transplant Year` <- factor(liver_living_sex_totals$`Transplant Year`,
+                                                       levels = sort(unique(liver_living_sex_totals$`Transplant Year`)))
+ggplot(liver_living_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants (Living Donors) per Year by sex",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Living Donor Liver Transplants by sex Each Year
+
+liver_living_sex_percentages <- liver_living_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_living_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Living Donors) by sex",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Living Donor Liver Transplants by sex Each Year (Percentage)
+
+liver_living_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    American_Indian = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+liver_living_race_totals$`Transplant Year` <- factor(liver_living_race_totals$`Transplant Year`,
+                                                     levels = sort(unique(liver_living_race_totals$`Transplant Year`)))
+ggplot(liver_living_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants (Living Donors) per Year by Race",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Liver Transplants by Race Each Year
+
+liver_living_race_percentages <- liver_living_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_living_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Living Donors) by Race",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Liver Transplants by Race Each Year (Percentage)
+
+liver_living_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+liver_living_age_totals$`Transplant Year` <- factor(liver_living_age_totals$`Transplant Year`,
+                                                    levels = sort(unique(liver_living_age_totals$`Transplant Year`)))
+ggplot(liver_living_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants (Living Donors) per Year by Age Group",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Liver Transplants by Age Each Year
+
+liver_living_age_percentages <- liver_living_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+
+ggplot(liver_living_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Living Donors) by Age Group",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Liver Transplants by Age Each Year (Percentage)
+
+liver_living_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver", `Donor Type` == "Living Donor") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+liver_living_payment_totals$`Transplant Year` <- factor(liver_living_payment_totals$`Transplant Year`,
+                                                        levels = sort(unique(liver_living_payment_totals$`Transplant Year`)))
+ggplot(liver_living_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants (Living Donors) per Year by Payment Method",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Liver Transplants by Payment Method Each Year
+
+liver_living_payment_percentages <- liver_living_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_living_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Living Donors) by Payment Method",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Living Donor Liver Transplants by Payment Method Each Year (Percentage)
+```
+
+```{r}
+liver_year_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(Total_Liver_Transplants = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+liver_year_totals$`Transplant Year` <- factor(liver_year_totals$`Transplant Year`,
+                                              levels = sort(unique(liver_year_totals$`Transplant Year`)))
+ggplot(liver_year_totals, aes(x = `Transplant Year`, y = Total_Liver_Transplants)) +
+  geom_bar(stat = "identity", fill = "mediumorchid") +
+  labs(title = "Total Liver Transplants per Year (Combined Donors)",
+       x = "Year",
+       y = "Total Liver Transplants") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# Total Combined Donor Liver Transplants Each Year
+
+liver_sex_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients")
+liver_sex_totals$`Transplant Year` <- factor(liver_sex_totals$`Transplant Year`,
+                                                levels = sort(unique(liver_sex_totals$`Transplant Year`)))
+ggplot(liver_sex_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants per Year by sex (Combined Donors)",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Combined Donor Liver Transplants by sex Each Year
+
+liver_sex_percentages <- liver_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants per Year by sex (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# Total Combined Donor Liver Transplants by sex Each Year (Percentage)
+
+liver_race_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    American_Indian = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Race", values_to = "Total_Recipients")
+liver_race_totals$`Transplant Year` <- factor(liver_race_totals$`Transplant Year`,
+                                              levels = sort(unique(liver_race_totals$`Transplant Year`)))
+ggplot(liver_race_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants per Year by Race (Combined Donors)",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Liver Transplants by Race Each Year
+
+liver_race_percentages <- liver_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants per Year by Race (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Liver Transplants by Race Each Year (Percentage)
+
+liver_age_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients")
+liver_age_totals$`Transplant Year` <- factor(liver_age_totals$`Transplant Year`,
+                                             levels = sort(unique(liver_age_totals$`Transplant Year`)))
+ggplot(liver_age_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants per Year by Age Group (Combined Donors)",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Liver Transplants by Age Each Year
+
+liver_age_percentages <- liver_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants per Year by Age Group (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Liver Transplants by Age Each Year (Percentage)
+
+liver_payment_totals <- recipient %>%
+  filter(`Organ Transplanted` == "Liver") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(-`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients")
+liver_payment_totals$`Transplant Year` <- factor(liver_payment_totals$`Transplant Year`,
+                                                 levels = sort(unique(liver_payment_totals$`Transplant Year`)))
+ggplot(liver_payment_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Liver Transplants per Year by Payment Method (Combined Donors)",
+       x = "Year",
+       y = "Number of Liver Transplants",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Liver Transplants by Payment Method Each Year
+
+liver_payment_percentages <- liver_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants per Year by Payment Method (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# Total Combined Donor Liver Transplants by Payment Method Each Year (Percentage)
+```
+
+
+## Exploratory Data Analysis (By Recipient Category)
+```{r}
+heart_sex_percentages <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Male = sum(`Male Distinct Recipients`, na.rm = TRUE),
+    Female = sum(`Female Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = c(Male, Female), names_to = "sex", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+heart_sex_percentages$`Transplant Year` <- factor(heart_sex_percentages$`Transplant Year`,
+                                                     levels = sort(unique(heart_sex_percentages$`Transplant Year`)))
+ggplot(heart_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Heart Transplants per Year by sex",
+       x = "Year",
+       y = "Percentage of Heart Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+lung_sex_percentages <- lung_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(lung_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Lung Transplants per Year by sex",
+       x = "Year",
+       y = "Percentage of Lung Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+pancreas_sex_percentages <- pancreas_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(pancreas_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Pancreas Transplants per Year by sex",
+       x = "Year",
+       y = "Percentage of Pancreas Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+kp_sex_percentages <- kp_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kp_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney-Pancreas Transplants per Year by sex",
+       x = "Year",
+       y = "Percentage of Kidney-Pancreas Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+kidney_deceased_sex_percentages <- kidney_deceased_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_deceased_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Deceased Donors) per Year by sex",
+       x = "Year",
+       y = "Percentage of Kidney Transplants (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+kidney_living_sex_percentages <- kidney_living_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_living_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Living Donors) per Year by sex",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+kidney_sex_percentages <- kidney_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants per Year by sex (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+liver_deceased_sex_percentages <- liver_deceased_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_deceased_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Deceased Donors) by sex",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+liver_living_sex_percentages <- liver_living_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_living_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Living Donors) by sex",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+
+liver_sex_percentages <- liver_sex_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_sex_percentages, aes(x = `Transplant Year`, y = Percentage, fill = sex)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants per Year by sex (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "sex") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("pink", "skyblue"))
+# All Organs by sex (Percentage) (Including Deceased, Living, Combined Totals for Liver and Kidney)
+```
+
+```{r}
+heart_race_percentages <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    White = sum(`White Distinct Recipients`, na.rm = TRUE),
+    Black = sum(`Black Distinct Recipients`, na.rm = TRUE),
+    Hispanic_Latino = sum(`Hispanic Distinct Recipients`, na.rm = TRUE),
+    Asian = sum(`Asian Distinct Recipients`, na.rm = TRUE),
+    Native_American = sum(`American Indian Distinct Recipients`, na.rm = TRUE),
+    Native_Hawaiian = sum(`Native Hawaiian Distinct Recipients`, na.rm = TRUE),
+    Multiracial = sum(`Multiracial Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Race", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+heart_race_percentages$`Transplant Year` <- factor(heart_race_percentages$`Transplant Year`,
+                                                   levels = sort(unique(heart_race_percentages$`Transplant Year`)))
+ggplot(heart_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Heart Transplants per Year by Race",
+       x = "Year",
+       y = "Percentage of Heart Transplants (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+lung_race_percentages <- lung_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(lung_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Lung Transplants per Year by Race",
+       x = "Year",
+       y = "Percentage of Lung Transplants (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+pancreas_race_percentages <- pancreas_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(pancreas_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Pancreas Transplants per Year by Race",
+       x = "Year",
+       y = "Percentage of Pancreas Transplants (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kp_race_percentages <- kp_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kp_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney-Pancreas Transplants per Year by Race",
+       x = "Year",
+       y = "Percentage of Kidney-Pancreas Transplants (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kidney_deceased_race_percentages <- kidney_deceased_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_deceased_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Deceased Donors) by Race",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kidney_living_race_percentages <- kidney_living_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_living_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Living Donors) per Year by Race",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kidney_race_percentages <- kidney_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants per Year by Race (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+liver_deceased_race_percentages <- liver_deceased_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_deceased_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Deceased Donors) by Race",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+liver_living_race_percentages <- liver_living_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_living_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Living Donors) by Race",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+liver_race_percentages <- liver_race_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_race_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Race)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants per Year by Race (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Race/Ethnicity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# All Organs by Race (Percentage) (Including Deceased, Living, Combined Totals for Liver and Kidney)
+```
+
+```{r}
+heart_age_percentages <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Age_0_18 = sum(`Pediatric Distinct Recipients`, na.rm = TRUE),
+    Age_18_30 = sum(`Age 18-30 Distinct Recipients`, na.rm = TRUE),
+    Age_31_40 = sum(`Age 31-40 Distinct Recipients`, na.rm = TRUE),
+    Age_41_50 = sum(`Age 41-50 Distinct Recipients`, na.rm = TRUE),
+    Age_51_60 = sum(`Age 51-60 Distinct Recipients`, na.rm = TRUE),
+    Age_61_Plus = sum(`Age 61+ Distinct Recipients`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Age_Group", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+heart_age_percentages$`Transplant Year` <- factor(heart_age_percentages$`Transplant Year`,
+                                                  levels = sort(unique(heart_age_percentages$`Transplant Year`)))
+ggplot(heart_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Heart Transplants per Year by Age Group",
+       x = "Year",
+       y = "Percentage of Heart Transplants (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+lung_age_percentages <- lung_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(lung_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Lung Transplants per Year by Age Group",
+       x = "Year",
+       y = "Percentage of Lung Transplants (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+pancreas_age_percentages <- pancreas_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(pancreas_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Pancreas Transplants per Year by Age Group",
+       x = "Year",
+       y = "Percentage of Pancreas Transplants (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+ggplot(kp_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney-Pancreas Transplants per Year by Age Group",
+       x = "Year",
+       y = "Percentage of Kidney-Pancreas Transplants (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kidney_deceased_age_percentages <- kidney_deceased_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_deceased_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Deceased Donors) by Age Group",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kidney_living_age_percentages <- kidney_living_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_living_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Living Donors) per Year by Age Group",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kidney_age_percentages <- kidney_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants per Year by Age Group (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+liver_deceased_age_percentages <- liver_deceased_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_deceased_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Deceased Donors) by Age Group",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+liver_living_age_percentages <- liver_living_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_living_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Living Donors) by Age Group",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+liver_age_percentages <- liver_age_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_age_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Age_Group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants per Year by Age Group (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Age Group") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# All Organs by Age (Percentage) (Including Deceased, Living, Combined Totals for Liver and Kidney)
+```
+
+```{r}
+heart_payment_percentages <- recipient %>%
+  filter(`Organ Transplanted` == "Heart") %>%
+  group_by(`Transplant Year`) %>%
+  summarize(
+    Medicare_Advantage = sum(`Distinct Recipients with Medicare Advantage Payment Source`, na.rm = TRUE),
+    Medicare_FFS = sum(`Distinct Recipients with Medicare FFS Payment Source`, na.rm = TRUE),
+    Medicaid_CHIP = sum(`Distinct Recipients with Medicaid and CHIP Payment Source`, na.rm = TRUE),
+    Private_Insurance = sum(`Distinct Recipients with Private Insurance Payment Source`, na.rm = TRUE),
+    Other_Insurance = sum(`Distinct Recipients with Other Insurance Payment Sources`, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(cols = -`Transplant Year`, names_to = "Payment_Source", values_to = "Total_Recipients") %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+heart_payment_percentages$`Transplant Year` <- factor(heart_payment_percentages$`Transplant Year`,
+                                                      levels = sort(unique(heart_payment_percentages$`Transplant Year`)))
+ggplot(heart_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Heart Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Percentage of Heart Transplants (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+lung_payment_percentages <- lung_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(lung_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Lung Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Percentage of Lung Transplants (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+pancreas_payment_percentages <- pancreas_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(pancreas_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Pancreas Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Percentage of Pancreas Transplants (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kp_payment_percentages <- kp_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+kp_payment_percentages$`Transplant Year` <- factor(kp_payment_percentages$`Transplant Year`,
+                                                   levels = sort(unique(kp_payment_percentages$`Transplant Year`)))
+ggplot(kp_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney-Pancreas Transplants per Year by Payment Method",
+       x = "Year",
+       y = "Percentage of Kidney-Pancreas Transplants (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kidney_deceased_payment_percentages <- kidney_deceased_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_deceased_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Deceased Donors) by Payment Method",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kidney_living_payment_percentages <- kidney_living_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_living_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants (Living Donors) per Year by Payment Method",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+kidney_payment_percentages <- kidney_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Kidney Transplants per Year by Payment Method (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+liver_deceased_payment_percentages <- liver_deceased_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_deceased_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Deceased Donors) by Payment Method",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+liver_living_payment_percentages <- liver_living_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_living_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants (Living Donors) by Payment Method",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+
+liver_payment_percentages <- liver_payment_totals %>%
+  group_by(`Transplant Year`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(liver_payment_percentages, aes(x = `Transplant Year`, y = Percentage, fill = Payment_Source)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Percentage of Liver Transplants per Year by Payment Method (Combined Donors)",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Payment Method") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set1")
+# All Organs by Payment Method (Percentage) (Including Deceased, Living, Combined Totals for Liver and Kidney)
+```
+
+```{r}
+kidney_liver_donor_totals <- recipient %>%
+  filter(`Organ Transplanted` %in% c("Kidney", "Liver")) %>%
+  group_by(`Transplant Year`, `Organ Transplanted`, `Donor Type`) %>%
+  summarize(Total_Recipients = sum(`Total Distinct Recipients`, na.rm = TRUE), .groups = "drop")
+kidney_liver_donor_totals$`Transplant Year` <- factor(kidney_liver_donor_totals$`Transplant Year`,
+                                                      levels = sort(unique(kidney_liver_donor_totals$`Transplant Year`)))
+ggplot(kidney_liver_donor_totals, aes(x = `Transplant Year`, y = Total_Recipients, fill = `Donor Type`)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~`Organ Transplanted`) +
+  labs(title = "Total Kidney and Liver Transplants by Donor Type",
+       x = "Year",
+       y = "Total Number of Transplants",
+       fill = "Donor Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("Deceased Donor" = "steelblue", "Living Donor" = "darkorange"))
+
+kidney_liver_donor_percentages <- kidney_liver_donor_totals %>%
+  group_by(`Transplant Year`, `Organ Transplanted`) %>%
+  mutate(Percentage = Total_Recipients / sum(Total_Recipients) * 100)
+ggplot(kidney_liver_donor_percentages, aes(x = `Transplant Year`, y = Percentage, fill = `Donor Type`)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~`Organ Transplanted`) +
+  labs(title = "Percentage of Kidney and Liver Transplants by Donor Type",
+       x = "Year",
+       y = "Percentage (%)",
+       fill = "Donor Type") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("Deceased Donor" = "steelblue", "Living Donor" = "darkorange"))
+# Percentage from Living Donors (Percentage) (Only Liver and Kidney)
+```
+
+
+
+
+
