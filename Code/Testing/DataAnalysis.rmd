@@ -1,0 +1,392 @@
+---
+title: "320 Project Data Test"
+author: "Grady Herbert"
+date: "2025-05-05"
+output: pdf_document
+---
+
+```{r, setup, include=FALSE}
+library(dplyr)
+library(mosaic)
+library(Amelia)
+library(ggplot2)
+library(tidyr)
+library(kableExtra)
+library(gridExtra)
+library(grid)
+library(readxl)
+library(broom)
+library(emmeans) 
+library(here)
+library(conflicted)
+  conflicts_prefer(mosaic::prop.test)
+  conflicts_prefer(base::sum)
+```
+
+```{r, include=FALSE}
+
+knitr::opts_knit$set(root.dir = here::here())
+
+recipient_path <- here("Data_Raw/Organ_Transplant", "OrganTransplantData.xlsx")
+recipient <- read_xlsx(recipient_path, sheet = 1)
+
+waitlist_path <- here("Data_Raw/Organ_Transplant", "OrganTransplantData.xlsx")
+waitlist <- read_xlsx(waitlist_path, sheet = 2)
+# Upload file into R Studio for code to run
+# Done by candidate (not registrations) as it represents the number of people waiting for an organ
+# People can register to get an organ at multiple centers and for multiple organs (Duplicate cases)
+# A candidate waiting for multiple organs is tallied once under cohorts where he/she is waiting for an organ
+```
+
+```{r, include=FALSE}
+race_columns <- c("Race: White, Non-Hispanic", 
+                  "Race: Black, Non-Hispanic",
+                  "Race: Asian, Non-Hispanic",
+                  "Race: Hispanic/Latino")
+waitlist[race_columns] <- lapply(waitlist[race_columns], function(x) {
+  as.numeric(gsub(",", "", x))
+})
+
+age_columns <- c("Age Group: Pediatric",
+                 "Age Group: 18-30",
+                 "Age Group: 31-40",
+                 "Age Group: 41-50",
+                 "Age Group: 51-60",
+                 "Age Group: 61+")
+waitlist[age_columns] <- lapply(waitlist[age_columns], function(x) {
+  as.numeric(gsub(",", "", ifelse(x == "Suppressed", NA, x)))
+})
+
+payment_columns <- c("Primary Payment: Medicare Advantage",
+                     "Primary Payment: Medicare FFS",
+                     "Primary Payment: Medicaid & CHIP",
+                     "Primary Payment: Other",
+                     "Primary Payment: Private")
+waitlist[payment_columns] <- lapply(waitlist[payment_columns], function(x) {
+  as.numeric(gsub(",", "", ifelse(x == "Suppressed", NA, x)))
+})
+# Converting info to numeric data
+```
+
+
+## Living vs. Deceased Donor Liver Transplant Graphs
+```{r}
+# Kidney Tests
+male_counts <- c(67132, 22350)
+total_counts <- c(67132 + 44282, 22350 + 13187)
+prop_test_result <- prop.test(x = male_counts, n = total_counts)
+print("Two-Proportion Z-Test for Difference in Male Proportion by Donor Type (Kidney Only):")
+print(prop_test_result)
+
+kidney_long_prop <- recipient %>%
+  filter(`Organ Transplanted` == "Kidney") %>%
+  mutate(across(
+    c(`White Distinct Recipients`,
+      `Black Distinct Recipients`,
+      `Hispanic Distinct Recipients`,
+      `Asian Distinct Recipients`),
+    ~ as.numeric(gsub(",", "", .x))
+  )) %>%
+  transmute(
+    year       = `Transplant Year`,
+    donor_type = `Donor Type`,
+    white      = `White Distinct Recipients`,
+    black      = `Black Distinct Recipients`,
+    hispanic   = `Hispanic Distinct Recipients`,
+    asian      = `Asian Distinct Recipients`
+  ) %>%
+  pivot_longer(cols = white:asian,
+               names_to  = "race",
+               values_to = "recipients") %>%
+  filter(!is.na(recipients)) %>%
+  group_by(year, donor_type) %>%
+  mutate(total_recipients = sum(recipients)) %>%
+  ungroup() %>%
+  mutate(
+    proportion = recipients / total_recipients,
+    race       = factor(race),
+    donor_type = factor(donor_type)
+  )
+anova_prop <- aov(proportion ~ race * donor_type, data = kidney_long_prop)
+prop_emm <- emmeans(anova_prop, ~ donor_type | race)
+prop_contrasts <- pairs(prop_emm, adjust = "bonferroni") %>%
+  as_tibble() %>% 
+  select(race      = race,
+         estimate  = estimate,
+         SE        = SE,
+         df,
+         t.ratio   = t.ratio,
+         p.value   = p.value)
+print(prop_contrasts)
+
+kidney_age_prop <- recipient %>% 
+  filter(`Organ Transplanted` == "Kidney") %>% 
+  mutate(across(
+    c(`Pediatric Distinct Recipients`,
+      `Age 18-30 Distinct Recipients`,
+      `Age 31-40 Distinct Recipients`,
+      `Age 41-50 Distinct Recipients`,
+      `Age 51-60 Distinct Recipients`,
+      `Age 61+ Distinct Recipients`),
+    ~ as.numeric(gsub(",", "", .x))
+  )) %>% 
+  transmute(
+    year         = `Transplant Year`,
+    donor_type   = `Donor Type`,
+    age_0_17     = `Pediatric Distinct Recipients`,
+    age_18_30    = `Age 18-30 Distinct Recipients`,
+    age_31_40    = `Age 31-40 Distinct Recipients`,
+    age_41_50    = `Age 41-50 Distinct Recipients`,
+    age_51_60    = `Age 51-60 Distinct Recipients`,
+    age_61_plus  = `Age 61+ Distinct Recipients`
+  ) %>% 
+  pivot_longer(
+    cols      = age_0_17:age_61_plus,
+    names_to  = "age_group",
+    values_to = "recipients"
+  ) %>% 
+  filter(!is.na(recipients)) %>% 
+  group_by(year, donor_type) %>%
+  mutate(total_recipients = sum(recipients)) %>%
+  ungroup() %>%
+  mutate(
+    proportion  = recipients / total_recipients,
+    age_group   = factor(age_group,
+                         levels = c("age_0_17", "age_18_30", "age_31_40", 
+                                    "age_41_50", "age_51_60", "age_61_plus")),
+    donor_type  = factor(donor_type)
+  )
+anova_age <- aov(proportion ~ age_group * donor_type, data = kidney_age_prop)
+pair_age <- emmeans(anova_age, ~ donor_type | age_group)
+age_contrasts <- pairs(pair_age, adjust = "bonferroni") %>% 
+  as_tibble() %>% 
+  select(age_group      = age_group,
+         estimate  = estimate,
+         SE        = SE,
+         df,
+         t.ratio   = t.ratio,
+         p.value   = p.value)
+print(age_contrasts)
+
+kidney_payment_prop <- recipient %>% 
+  filter(`Organ Transplanted` == "Kidney") %>% 
+  mutate(across(
+    c(`Distinct Recipients with Medicare Advantage Payment Source`,
+      `Distinct Recipients with Medicare FFS Payment Source`,
+      `Distinct Recipients with Medicaid and CHIP Payment Source`,
+      `Distinct Recipients with Private Insurance Payment Source`,
+      `Distinct Recipients with Other Insurance Payment Sources`),
+    ~ as.numeric(gsub(",", "", .x))
+  )) %>% 
+  transmute(
+    year               = `Transplant Year`,
+    donor_type         = `Donor Type`,
+    medicare_advantage = `Distinct Recipients with Medicare Advantage Payment Source`,
+    medicare_ffs       = `Distinct Recipients with Medicare FFS Payment Source`,
+    medicaid_chip      = `Distinct Recipients with Medicaid and CHIP Payment Source`,
+    private_insurance  = `Distinct Recipients with Private Insurance Payment Source`,
+    other_insurance    = `Distinct Recipients with Other Insurance Payment Sources`
+  ) %>% 
+  pivot_longer(
+    cols      = medicare_advantage:other_insurance,
+    names_to  = "payment_source",
+    values_to = "recipients"
+  ) %>% 
+  filter(!is.na(recipients)) %>% 
+  group_by(year, donor_type) %>%
+  mutate(total_recipients = sum(recipients)) %>%
+  ungroup() %>% 
+  mutate(
+    proportion      = recipients / total_recipients,
+    payment_source  = factor(payment_source,
+      levels = c("medicare_advantage", "medicare_ffs", 
+                 "medicaid_chip", "private_insurance", "other_insurance")),
+    donor_type      = factor(donor_type)
+  )
+anova_pay <- aov(proportion ~ payment_source * donor_type, data = kidney_payment_prop)
+pair_pay <- emmeans(anova_pay, ~ donor_type | payment_source)
+payment_contrasts <- pairs(pair_pay, adjust = "bonferroni") %>% 
+  as_tibble() %>% 
+  select(payment_source      = payment_source,
+         estimate  = estimate,
+         SE        = SE,
+         df,
+         t.ratio   = t.ratio,
+         p.value   = p.value)
+print(payment_contrasts)
+```
+
+```{r}
+# Liver Tests
+male_counts_liver <- c(32724, 1666)
+total_counts_liver <- c(32724 + 20014, 1666 + 1690)
+prop_test_liver <- prop.test(x = male_counts_liver, n = total_counts_liver)
+print("Two-Proportion Z-Test for Difference in Male Proportion by Donor Type (Liver Only):")
+print(prop_test_liver)
+```
+
+
+```{r}
+liver_long_prop <- recipient %>%
+  filter(`Organ Transplanted` == "Liver") %>%
+  mutate(across(
+    c(`White Distinct Recipients`,
+      `Black Distinct Recipients`,
+      `Hispanic Distinct Recipients`,
+      `Asian Distinct Recipients`),
+    ~ as.numeric(gsub(",", "", .x))
+  )) %>%
+  transmute(
+    year       = `Transplant Year`,
+    donor_type = `Donor Type`,
+    white      = `White Distinct Recipients`,
+    black      = `Black Distinct Recipients`,
+    hispanic   = `Hispanic Distinct Recipients`,
+    asian      = `Asian Distinct Recipients`
+  ) %>%
+  pivot_longer(cols = white:asian,
+               names_to  = "race",
+               values_to = "recipients") %>%
+  filter(!is.na(recipients)) %>%
+  group_by(year, donor_type) %>%
+  mutate(total_recipients = sum(recipients)) %>%
+  ungroup() %>%
+  mutate(
+    proportion = recipients / total_recipients,
+    race       = factor(race),
+    donor_type = factor(donor_type)
+  )
+anova_prop <- aov(proportion ~ race * donor_type, data = liver_long_prop)
+prop_emm <- emmeans(anova_prop, ~ donor_type | race)
+prop_contrasts <- pairs(prop_emm, adjust = "bonferroni") %>%
+  as_tibble() %>% 
+  select(race      = race,
+         estimate  = estimate,
+         SE        = SE,
+         df,
+         t.ratio   = t.ratio,
+         p.value   = p.value)
+print(prop_contrasts)
+```
+
+
+```{r}
+liver_age_prop <- recipient %>% 
+  filter(`Organ Transplanted` == "Liver") %>% 
+  mutate(across(
+    c(`Pediatric Distinct Recipients`,
+      `Age 18-30 Distinct Recipients`,
+      `Age 31-40 Distinct Recipients`,
+      `Age 41-50 Distinct Recipients`,
+      `Age 51-60 Distinct Recipients`,
+      `Age 61+ Distinct Recipients`),
+    ~ as.numeric(gsub(",", "", .x))
+  )) %>% 
+  transmute(
+    year         = `Transplant Year`,
+    donor_type   = `Donor Type`,
+    age_0_17     = `Pediatric Distinct Recipients`,
+    age_18_30    = `Age 18-30 Distinct Recipients`,
+    age_31_40    = `Age 31-40 Distinct Recipients`,
+    age_41_50    = `Age 41-50 Distinct Recipients`,
+    age_51_60    = `Age 51-60 Distinct Recipients`,
+    age_61_plus  = `Age 61+ Distinct Recipients`
+  ) %>% 
+  pivot_longer(
+    cols      = age_0_17:age_61_plus,
+    names_to  = "age_group",
+    values_to = "recipients"
+  ) %>% 
+  filter(!is.na(recipients)) %>% 
+  group_by(year, donor_type) %>%
+  mutate(total_recipients = sum(recipients)) %>%
+  ungroup() %>%
+  mutate(
+    proportion  = recipients / total_recipients,
+    age_group   = factor(age_group,
+                         levels = c("age_0_17", "age_18_30", "age_31_40", 
+                                    "age_41_50", "age_51_60", "age_61_plus")),
+    donor_type  = factor(donor_type)
+  )
+anova_age <- aov(proportion ~ age_group * donor_type, data = liver_age_prop)
+pair_age <- emmeans(anova_age, ~ donor_type | age_group)
+age_contrasts <- pairs(pair_age, adjust = "bonferroni") %>% 
+  as_tibble() %>% 
+  select(age_group      = age_group,
+         estimate  = estimate,
+         SE        = SE,
+         df,
+         t.ratio   = t.ratio,
+         p.value   = p.value)
+print(age_contrasts)
+```
+
+
+```{r}
+liver_payment_prop <- recipient %>% 
+  filter(`Organ Transplanted` == "Liver") %>% 
+  mutate(across(
+    c(`Distinct Recipients with Medicare Advantage Payment Source`,
+      `Distinct Recipients with Medicare FFS Payment Source`,
+      `Distinct Recipients with Medicaid and CHIP Payment Source`,
+      `Distinct Recipients with Private Insurance Payment Source`,
+      `Distinct Recipients with Other Insurance Payment Sources`),
+    ~ as.numeric(gsub(",", "", .x))
+  )) %>% 
+  transmute(
+    year               = `Transplant Year`,
+    donor_type         = `Donor Type`,
+    medicare_advantage = `Distinct Recipients with Medicare Advantage Payment Source`,
+    medicare_ffs       = `Distinct Recipients with Medicare FFS Payment Source`,
+    medicaid_chip      = `Distinct Recipients with Medicaid and CHIP Payment Source`,
+    private_insurance  = `Distinct Recipients with Private Insurance Payment Source`,
+    other_insurance    = `Distinct Recipients with Other Insurance Payment Sources`
+  ) %>% 
+  pivot_longer(
+    cols      = medicare_advantage:other_insurance,
+    names_to  = "payment_source",
+    values_to = "recipients"
+  ) %>% 
+  filter(!is.na(recipients)) %>% 
+  group_by(year, donor_type) %>%
+  mutate(total_recipients = sum(recipients)) %>%
+  ungroup() %>% 
+  mutate(
+    proportion      = recipients / total_recipients,
+    payment_source  = factor(payment_source,
+      levels = c("medicare_advantage", "medicare_ffs", 
+                 "medicaid_chip", "private_insurance", "other_insurance")),
+    donor_type      = factor(donor_type)
+  )
+anova_pay <- aov(proportion ~ payment_source * donor_type, data = liver_payment_prop)
+pair_pay <- emmeans(anova_pay, ~ donor_type | payment_source)
+payment_contrasts <- pairs(pair_pay, adjust = "bonferroni") %>% 
+  as_tibble() %>% 
+  select(payment_source      = payment_source,
+         estimate  = estimate,
+         SE        = SE,
+         df,
+         t.ratio   = t.ratio,
+         p.value   = p.value)
+print(payment_contrasts)
+```
+
+
+## Living vs. Deceased Donor Transplant Tests (Liver and Kidney)
+```{r}
+
+```
+
+
+## Specific Organ Recipient and Candidate Differences Analysis
+```{r}
+
+```
+
+
+## Other Analysis
+```{r}
+
+```
+
+

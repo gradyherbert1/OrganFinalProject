@@ -1,0 +1,784 @@
+---
+title: "Disease Burden Analysis"
+format: pdf
+---
+
+# Initializing
+```{r, warning=FALSE, message=FALSE} 
+#| label: Loading packages
+
+library(mosaic)   
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(readxl)
+library(writexl)
+library(plotly)
+library(dplyr)
+library(readr)
+library(here)
+library(rvest)
+library(purrr)
+library(conflicted)
+conflict_prefer("max", "mosaic")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
+conflict_prefer("summarize", "dplyr")
+conflict_prefer("mean", "mosaic")
+```
+
+```{r}
+#| label: Setting working directory
+
+## Adjust!
+knitr::opts_knit$set(root.dir = here::here())
+```
+
+# Loading Data
+```{r, message=FALSE}
+#| label: Loading in disease burden data frames
+
+Cardiovascular_Disease_Mortality_Burden_path <- here("Data_Raw/Disease_Mortality_Burden", "Heart_Liver_Kidney_Disease_Death.xlsx")
+Cardiovascular_Disease_Mortality_Burden <- read_xlsx(Cardiovascular_Disease_Mortality_Burden_path, sheet = 1)
+
+Liver_Disease_Mortality_Burden_path <- here("Data_Raw/Disease_Mortality_Burden", "Heart_Liver_Kidney_Disease_Death.xlsx")
+Liver_Disease_Mortality_Burden <- read_xlsx(Liver_Disease_Mortality_Burden_path, sheet = 1)
+
+Kidney_Disease_Mortality_Burden_path <- here("Data_Raw/Disease_Mortality_Burden", "Heart_Liver_Kidney_Disease_Death.xlsx")
+Kidney_Disease_Mortality_Burden <- read_xlsx(Kidney_Disease_Mortality_Burden_path, sheet = 1)
+# Source:  https://www.cdc.gov/nchs/hus/contents2020-2021.htm#Table-SlctMort
+```
+
+```{r}
+#| label: Loading in organ transplantation data frames
+
+HRSA_National_Data_path <- here("Data_Raw/Organ_Transplant", "Organ_Donation_and_Transplantation_Data.xlsx")
+HRSA_National_Data <- read_xlsx(HRSA_National_Data_path, sheet = 2)
+# Source: https://data.hrsa.gov/data/download?data=organ#organ
+
+HRSA_State_Data_path <- here("Data_Raw/Organ_Transplant", "Organ_Donation_and_Transplantation_Data.xlsx")
+HRSA_State_Data <- read_xlsx(HRSA_State_Data_path, sheet = 3)
+# Source: https://data.hrsa.gov/data/download?data=organ#organ
+
+HRSA_Donor_Demographics_path <- here("Data_Raw/Organ_Transplant", "Organ_Donation_and_Transplantation_Data.xlsx")
+HRSA_Donor_Demographics <- read_xlsx(HRSA_Donor_Demographics_path, sheet = 4)
+# Source: https://data.hrsa.gov/data/download?data=organ#organ
+
+HRSA_Candidate_Registration_path <- here("Data_Raw/Organ_Transplant", "Organ_Donation_and_Transplantation_Data.xlsx")
+HRSA_Candidate_Registration <- read_xlsx(HRSA_Candidate_Registration_path, sheet = 7)
+# Source: https://data.hrsa.gov/data/download?data=organ#organ
+
+HRSA_Waitlist_Removal_path <- here("Data_Raw/Organ_Transplant", "Organ_Donation_and_Transplantation_Data.xlsx")
+HRSA_Waitlist_Removal <- read_xlsx(HRSA_Waitlist_Removal_path, sheet = 9)
+# Source: https://data.hrsa.gov/data/download?data=organ#organ
+
+HRSA_Recipient_Demographics_path <- here("Data_Raw/Organ_Transplant", "Organ_Donation_and_Transplantation_Data.xlsx")
+HRSA_Recipient_Demographics <- read_xlsx(HRSA_Recipient_Demographics_path, sheet = 10)
+# Source: https://data.hrsa.gov/data/download?data=organ#organ
+```
+
+# Cleaning Data
+
+## Disease mortality burden by organ v sex and race
+
+```{r, warning=FALSE}
+#| label: Cleaning cardiovascular disease mortality burden data and creating by race/sex data frames
+
+Sexes <- c("Male", "Female")
+Races <- c("White only", "Black or African American only", "Asian or Pacific Islander only", "Hispanic or Latino")
+
+# Renaming columns
+Cardiovascular_Disease_Mortality_Burden_Columns <- as.character(Cardiovascular_Disease_Mortality_Burden[3, ])
+Cardiovascular_Disease_Mortality_Burden_Columns[is.na(Cardiovascular_Disease_Mortality_Burden_Columns)] <- "NA"
+Cardiovascular_Disease_Mortality_Burden_Columns <- make.unique(Cardiovascular_Disease_Mortality_Burden_Columns)
+  # make.unique appends a sequence of numbers to make the column names unique
+colnames(Cardiovascular_Disease_Mortality_Burden) <- Cardiovascular_Disease_Mortality_Burden_Columns
+
+Cardiovascular_Disease_Mortality_Burden <- Cardiovascular_Disease_Mortality_Burden |>
+  rename(Characteristic = "Sex and cause of death\\1") |>
+  select(Characteristic,`1997\\3`:`2019\\4`)
+
+# Removing irrelevant data
+Cardiovascular_Disease_Mortality_Burden <- Cardiovascular_Disease_Mortality_Burden[c(6, 26, 47, 89, 129, 209, 269), ]
+
+# Updating characteristics for "Chronic liver disease and cirrhosis"
+Cardiovascular_Disease_Mortality_Burden[1, "Characteristic"] <- "All"
+Cardiovascular_Disease_Mortality_Burden[2, "Characteristic"] <- "Male"
+Cardiovascular_Disease_Mortality_Burden[3, "Characteristic"] <- "Female"
+Cardiovascular_Disease_Mortality_Burden[4, "Characteristic"] <- "White only"
+Cardiovascular_Disease_Mortality_Burden[5, "Characteristic"] <- "Black or African American only"
+Cardiovascular_Disease_Mortality_Burden[6, "Characteristic"] <- "Asian or Pacific Islander only"
+Cardiovascular_Disease_Mortality_Burden[7, "Characteristic"] <- "Hispanic or Latino"
+
+# Cleaning year names
+colnames(Cardiovascular_Disease_Mortality_Burden) <- gsub("\\\\[0-9]$", "", colnames(Cardiovascular_Disease_Mortality_Burden))
+
+Cardiovascular_Disease_Mortality_Burden <- Cardiovascular_Disease_Mortality_Burden |>
+  mutate(across(`1997`:`2019`, ~ as.numeric(.x) / 100000))
+
+print(Cardiovascular_Disease_Mortality_Burden)
+
+Cardiovascular_Disease_Mortality_Burden_Sex <- Cardiovascular_Disease_Mortality_Burden |>
+  filter(Characteristic %in% c(Sexes)) |>
+rename(Sex = Characteristic)
+
+print(Cardiovascular_Disease_Mortality_Burden_Sex)
+
+Cardiovascular_Disease_Mortality_Burden_Race <- Cardiovascular_Disease_Mortality_Burden |>
+  filter(Characteristic %in% c(Races)) |>
+  rename(Race = Characteristic)
+
+print(Cardiovascular_Disease_Mortality_Burden_Race)
+```
+
+```{r, warning=FALSE}
+#| label: Cleaning liver disease mortality burden data and creating by race/sex data frames
+
+# Renaming columns
+Liver_Disease_Mortality_Burden_Columns <- as.character(Liver_Disease_Mortality_Burden[3, ])
+Liver_Disease_Mortality_Burden_Columns[is.na(Liver_Disease_Mortality_Burden_Columns)] <- "NA"
+Liver_Disease_Mortality_Burden_Columns <- make.unique(Liver_Disease_Mortality_Burden_Columns)
+  # make.unique appends a sequence of numbers to make the column names unique
+colnames(Liver_Disease_Mortality_Burden) <- Liver_Disease_Mortality_Burden_Columns
+
+Liver_Disease_Mortality_Burden <- Liver_Disease_Mortality_Burden |>
+  rename(Characteristic = "Sex and cause of death\\1") |>
+  select(Characteristic,`1997\\3`:`2019\\4`)
+
+# Removing irrelevant data
+Liver_Disease_Mortality_Burden <- Liver_Disease_Mortality_Burden[c(14, 35, 56, 97, 137, 217, 277), ]
+
+# Updating characteristics for "Chronic liver disease and cirrhosis"
+Liver_Disease_Mortality_Burden[1, "Characteristic"] <- "All"
+Liver_Disease_Mortality_Burden[2, "Characteristic"] <- "Male"
+Liver_Disease_Mortality_Burden[3, "Characteristic"] <- "Female"
+Liver_Disease_Mortality_Burden[4, "Characteristic"] <- "White only"
+Liver_Disease_Mortality_Burden[5, "Characteristic"] <- "Black or African American only"
+Liver_Disease_Mortality_Burden[6, "Characteristic"] <- "Asian or Pacific Islander only"
+Liver_Disease_Mortality_Burden[7, "Characteristic"] <- "Hispanic or Latino"
+
+# Cleaning year names
+colnames(Liver_Disease_Mortality_Burden) <- gsub("\\\\[0-9]$", "", colnames(Liver_Disease_Mortality_Burden))
+
+Liver_Disease_Mortality_Burden <- Liver_Disease_Mortality_Burden |>
+  mutate(across(`1997`:`2019`, ~ as.numeric(.x) / 100000))
+
+print(Liver_Disease_Mortality_Burden)
+
+Liver_Disease_Mortality_Burden_Sex <- Liver_Disease_Mortality_Burden |>
+  filter(Characteristic %in% c(Sexes))
+
+print(Liver_Disease_Mortality_Burden_Sex)
+
+Liver_Disease_Mortality_Burden_Race <- Liver_Disease_Mortality_Burden |>
+  filter(Characteristic %in% c(Races))
+
+print(Liver_Disease_Mortality_Burden_Race)
+```
+
+```{r, warning=FALSE}
+#| label: Cleaning kidney disease mortality burden data and creating by race/sex data frames
+
+# Renaming columns
+Kidney_Disease_Mortality_Burden_Columns <- as.character(Kidney_Disease_Mortality_Burden[3, ])
+Kidney_Disease_Mortality_Burden_Columns[is.na(Kidney_Disease_Mortality_Burden_Columns)] <- "NA"
+Kidney_Disease_Mortality_Burden_Columns <- make.unique(Kidney_Disease_Mortality_Burden_Columns)
+  # make.unique appends a sequence of numbers to make the column names unique
+colnames(Kidney_Disease_Mortality_Burden) <- Kidney_Disease_Mortality_Burden_Columns
+
+Kidney_Disease_Mortality_Burden <- Kidney_Disease_Mortality_Burden |>
+  rename(Characteristic = "Sex and cause of death\\1") |>
+  select(Characteristic,`1997\\3`:`2019\\4`)
+
+# Removing irrelevant data
+Kidney_Disease_Mortality_Burden <- Kidney_Disease_Mortality_Burden[c(21, 42, 63, 104, 144, 224, 284), ]
+
+# Updating characteristics for "Chronic liver disease and cirrhosis"
+Kidney_Disease_Mortality_Burden[1, "Characteristic"] <- "All"
+Kidney_Disease_Mortality_Burden[2, "Characteristic"] <- "Male"
+Kidney_Disease_Mortality_Burden[3, "Characteristic"] <- "Female"
+Kidney_Disease_Mortality_Burden[4, "Characteristic"] <- "White only"
+Kidney_Disease_Mortality_Burden[5, "Characteristic"] <- "Black or African American only"
+Kidney_Disease_Mortality_Burden[6, "Characteristic"] <- "Asian or Pacific Islander only"
+Kidney_Disease_Mortality_Burden[7, "Characteristic"] <- "Hispanic or Latino"
+
+# Cleaning year names
+colnames(Kidney_Disease_Mortality_Burden) <- gsub("\\\\[0-9]$", "", colnames(Kidney_Disease_Mortality_Burden))
+
+Kidney_Disease_Mortality_Burden <- Kidney_Disease_Mortality_Burden |>
+  mutate(across(`1997`:`2019`, ~ as.numeric(.x) / 100000))
+
+print(Kidney_Disease_Mortality_Burden)
+
+Kidney_Disease_Mortality_Burden_Sex <- Kidney_Disease_Mortality_Burden |>
+  filter(Characteristic %in% c(Sexes))
+
+print(Kidney_Disease_Mortality_Burden_Sex)
+
+Kidney_Disease_Mortality_Burden_Race <- Kidney_Disease_Mortality_Burden |>
+  filter(Characteristic %in% c(Races))
+
+print(Kidney_Disease_Mortality_Burden_Race)
+```
+
+## Donor Living Status (only applicable to livers and kidneys)
+```{r}
+#| label: Creating data frame for proportions of living v deceased organ donations
+
+Categories <- c("1 - Donor Type", "0 - Total")
+Donor_Living_Status <- c("Deceased Donor", "Living Donor")
+
+# Filtering for just data on living status
+Donor_Living_Status <- HRSA_Donor_Demographics |>
+  filter(Category %in% Categories) |>
+  select(`Donor Type Filter`, `Donor Count`) |>
+  rename(Status = `Donor Type Filter`,
+         Count = `Donor Count`) |>
+  mutate(Count = as.numeric(Count))
+
+# Saving total value
+All <- Donor_Living_Status$Count[Donor_Living_Status$Status == "Grand Total"]
+
+# Add proportion column
+Donor_Living_Status <- Donor_Living_Status |>
+  mutate(Proportion = (Count / All))   
+
+print(Donor_Living_Status)
+```
+
+## Recipient Demographic Data
+```{r, warning = FALSE}
+#| label: Heart recipient demographic data
+
+Heart_Recipients <- HRSA_Recipient_Demographics |>
+  filter(`Organ Transplanted` == "Heart") |>
+  select(`Transplant Year`:`Distinct Recipients with Other Insurance Payment Sources`)
+
+# Generating proportions from counts
+Heart_Recipients <- Heart_Recipients |>
+  mutate(across(`Total Distinct Recipients`:`Distinct Recipients with Other Insurance Payment Sources`, 
+                ~ as.numeric(.x))) |>
+  mutate(across(`Male Distinct Recipients`:`Distinct Recipients with Other Insurance Payment Sources`, 
+                ~ .x / `Total Distinct Recipients`,
+                .names = "Prop_{.col}"))
+
+# Renaming Prop_ variables
+Heart_Recipients <- Heart_Recipients |>
+  rename_with(
+    .fn = ~ paste0(gsub(" Distinct Recipients", "", .x)),
+    .cols = `Prop_Male Distinct Recipients`:`Prop_Distinct Recipients with Other Insurance Payment Sources`
+  ) |>
+  select(`Transplant Year`:`Organ Transplanted`, Prop_Male:`Prop_Distinct Recipients with Other Insurance Payment Sources`)
+
+print(Heart_Recipients)
+```
+
+
+```{r, warning=FALSE}
+#| label: Adding proportions to liver and kidney recipient demographic data
+
+Organs <- c("Liver", "Kidney")
+
+Deceased_Organ_Recipients <- HRSA_Recipient_Demographics |>
+  filter(`Organ Transplanted` %in% Organs,
+         `Donor Type` == "Deceased Donor")
+
+Living_Organ_Recipients <- HRSA_Recipient_Demographics |>
+  filter(`Organ Transplanted` %in% Organs,
+         `Donor Type` == "Living Donor")
+
+Deceased_v_Living_Organ_Recipients <- rbind(Deceased_Organ_Recipients, Living_Organ_Recipients)
+
+Deceased_v_Living_Organ_Recipients <- Deceased_v_Living_Organ_Recipients |>
+  select(`Transplant Year`:`Distinct Recipients with Other Insurance Payment Sources`)
+
+# Generating proportions from counts
+Deceased_v_Living_Organ_Recipients <- Deceased_v_Living_Organ_Recipients |>
+  mutate(across(`Total Distinct Recipients`:`Distinct Recipients with Other Insurance Payment Sources`, 
+                ~ as.numeric(.x))) |>
+  mutate(across(`Male Distinct Recipients`:`Distinct Recipients with Other Insurance Payment Sources`, 
+                ~ .x / `Total Distinct Recipients`,
+                .names = "Prop_{.col}"))
+
+# Renaming Prop_ variables
+Deceased_v_Living_Organ_Recipients <- Deceased_v_Living_Organ_Recipients |>
+  rename_with(
+    .fn = ~ paste0(gsub(" Distinct Recipients", "", .x)),
+    .cols = `Prop_Male Distinct Recipients`:`Prop_Distinct Recipients with Other Insurance Payment Sources`
+  )
+```
+
+
+
+```{r, warning=FALSE}
+#| label: Liver recipient demographic data
+
+Deceased_v_Living_Liver_Recipients <- Deceased_v_Living_Organ_Recipients |>
+  filter(`Organ Transplanted` == "Liver") |>
+  select(`Transplant Year`:`Organ Transplanted`, Prop_Male:`Prop_Distinct Recipients with Other Insurance Payment Sources`)
+
+print(Deceased_v_Living_Liver_Recipients)
+```
+
+```{r, warning=FALSE}
+#| label: Kidney ONLY recipient demographic data
+
+# Note: Pancreases are almost exclusively harvested from deceased donors, so excluding them
+
+Deceased_v_Living_Kidney_Recipients <- Deceased_v_Living_Organ_Recipients |>
+  filter(`Organ Transplanted` != "Liver") |>
+  select(`Transplant Year`:`Organ Transplanted`, Prop_Male:`Prop_Distinct Recipients with Other Insurance Payment Sources`)
+
+print(Deceased_v_Living_Kidney_Recipients)
+```
+
+# Exploratory Data Analysis
+
+## Disease Mortality Burden
+
+### Cardiovascular Disease Mortality Burden
+```{r, warning=FALSE}
+#| label: Cardiovascular disease mortality by sex
+
+print(Cardiovascular_Disease_Mortality_Burden_Sex)
+
+Cardiovascular_Disease_Mortality_Burden_Sex_Plot_Data <- Cardiovascular_Disease_Mortality_Burden_Sex |>
+  select(Sex, `2010`:`2019`) |>
+  pivot_longer(cols = `2010`:`2019`,
+               names_to = "Year",
+               values_to = "Prevalence") |>
+  mutate(
+    Prevalence = as.numeric(Prevalence),
+    Year = Year
+  )
+
+print(Cardiovascular_Disease_Mortality_Burden_Sex_Plot_Data)
+
+ggplot(Cardiovascular_Disease_Mortality_Burden_Sex_Plot_Data, aes(x = Year, y = Prevalence, fill = Sex)) +
+  geom_col(position = "dodge") +
+scale_y_continuous(
+  limits = c(0, 0.01),
+  breaks = seq(0, 0.01, by = 0.002),
+  labels = scales::percent_format(accuracy = 0.1)
+) +
+  labs(title = "Cardiovascular Disease Mortality by Sex",
+       y = "Prevalence",
+       x = "Year") +
+  theme_minimal()
+```
+
+```{r, warning=FALSE}
+#| label: Cardiovascular disease mortality by race
+
+print(Cardiovascular_Disease_Mortality_Burden_Race)
+
+Cardiovascular_Disease_Mortality_Burden_Sex_Plot_Data <- Cardiovascular_Disease_Mortality_Burden_Race |>
+  select(Race, `2010`:`2019`) |>
+  pivot_longer(cols = `2010`:`2019`,
+               names_to = "Year",
+               values_to = "Prevalence") |>
+  mutate(
+    Prevalence = as.numeric(Prevalence),
+    Year = Year
+  )
+
+print(Cardiovascular_Disease_Mortality_Burden_Sex_Plot_Data)
+
+ggplot(Cardiovascular_Disease_Mortality_Burden_Sex_Plot_Data, aes(x = Year, y = Prevalence, fill = Race)) +
+  geom_col(position = "dodge") +
+scale_y_continuous(
+  limits = c(0, 0.01),
+  breaks = seq(0, 0.01, by = 0.002),
+  labels = scales::percent_format(accuracy = 0.1)
+) +
+  labs(title = "Cardiovascular Disease Mortality by Race",
+       y = "Prevalence",
+       x = "Year") +
+  theme_minimal()
+```
+
+### Liver Disease Mortality Burden
+
+```{r, warning=FALSE}
+#| label: Liver disease mortality by sex
+
+print(Liver_Disease_Mortality_Burden_Sex)
+
+Liver_Disease_Mortality_Burden_Sex_Plot_Data <- Liver_Disease_Mortality_Burden_Sex |>
+  select(Characteristic, `2010`:`2019`) |>
+  rename(Sex = Characteristic) |>
+  pivot_longer(cols = `2010`:`2019`,
+               names_to = "Year",
+               values_to = "Prevalence") |>
+  mutate(
+    Prevalence = as.numeric(Prevalence),
+    Year = Year
+  )
+
+print(Liver_Disease_Mortality_Burden_Sex_Plot_Data)
+
+ggplot(Liver_Disease_Mortality_Burden_Sex_Plot_Data, aes(x = Year, y = Prevalence, fill = Sex)) +
+  geom_col(position = "dodge") +
+scale_y_continuous(
+  limits = c(0, 0.001),
+  breaks = seq(0, 0.001, by = 0.0002),
+  labels = scales::percent_format(accuracy = 0.01)
+) +
+  labs(title = "Liver Disease Mortality by Sex",
+       y = "Prevalence",
+       x = "Year") +
+  theme_minimal()
+```
+
+```{r, warning=FALSE}
+#| label: Liver disease mortality by race
+
+print(Liver_Disease_Mortality_Burden_Race)
+
+Liver_Disease_Mortality_Burden_Race_Plot_Data <- Liver_Disease_Mortality_Burden_Race |>
+  select(Characteristic, `2010`:`2019`) |>
+  rename(Race = Characteristic) |>
+  pivot_longer(cols = `2010`:`2019`,
+               names_to = "Year",
+               values_to = "Prevalence") |>
+  mutate(
+    Prevalence = as.numeric(Prevalence),
+    Year = Year
+  )
+
+print(Liver_Disease_Mortality_Burden_Race_Plot_Data)
+
+ggplot(Liver_Disease_Mortality_Burden_Race_Plot_Data, aes(x = Year, y = Prevalence, fill = Race)) +
+  geom_col(position = "dodge") +
+scale_y_continuous(
+  limits = c(0, 0.001),
+  breaks = seq(0, 0.001, by = 0.0002),
+  labels = scales::percent_format(accuracy = 0.01)
+) +
+  labs(title = "Liver Disease Mortality by Race",
+       y = "Prevalence",
+       x = "Year") +
+  theme_minimal()
+```
+
+### Kidney Disease Mortality Burden
+
+```{r, warning=FALSE}
+#| label: Kidney disease mortality by sex
+
+print(Kidney_Disease_Mortality_Burden_Sex)
+
+Kidney_Disease_Mortality_Burden_Sex_Plot_Data <- Kidney_Disease_Mortality_Burden_Sex |>
+  select(Characteristic, `2010`:`2019`) |>
+  rename(Sex = Characteristic) |>
+  pivot_longer(cols = `2010`:`2019`,
+               names_to = "Year",
+               values_to = "Prevalence") |>
+  mutate(
+    Prevalence = as.numeric(Prevalence),
+    Year = Year
+  )
+
+print(Kidney_Disease_Mortality_Burden_Sex_Plot_Data)
+
+ggplot(Kidney_Disease_Mortality_Burden_Sex_Plot_Data, aes(x = Year, y = Prevalence, fill = Sex)) +
+  geom_col(position = "dodge") +
+scale_y_continuous(
+  limits = c(0, 0.001),
+  breaks = seq(0, 0.001, by = 0.0002),
+  labels = scales::percent_format(accuracy = 0.01)
+) +
+  labs(title = "Kidney Disease Mortality by Sex",
+       y = "Prevalence",
+       x = "Year") +
+  theme_minimal()
+```
+
+```{r, warning=FALSE}
+#| label: Kidney disease mortality by race
+
+print(Kidney_Disease_Mortality_Burden_Race)
+
+Kidney_Disease_Mortality_Burden_Race_Plot_Data <- Kidney_Disease_Mortality_Burden_Race |>
+  select(Characteristic, `2010`:`2019`) |>
+  rename(Race = Characteristic) |>
+  pivot_longer(cols = `2010`:`2019`,
+               names_to = "Year",
+               values_to = "Prevalence") |>
+  mutate(
+    Prevalence = as.numeric(Prevalence),
+    Year = Year
+  )
+
+print(Kidney_Disease_Mortality_Burden_Race_Plot_Data)
+
+ggplot(Kidney_Disease_Mortality_Burden_Race_Plot_Data, aes(x = Year, y = Prevalence, fill = Race)) +
+  geom_col(position = "dodge") +
+scale_y_continuous(
+  limits = c(0, 0.001),
+  breaks = seq(0, 0.001, by = 0.0002),
+  labels = scales::percent_format(accuracy = 0.01)
+) +
+  labs(title = "Kidney Disease Mortality by Race",
+       y = "Prevalence",
+       x = "Year") +
+  theme_minimal()
+```
+
+# Organ Allocation
+
+## Heart Allocation
+```{r}
+#| label: Heart recipients by sex
+
+Heart_Plot_Sex_Data <- Heart_Recipients |>
+  select(`Transplant Year`:`Organ Transplanted`, Prop_Male, Prop_Female) |>
+  pivot_longer(cols = starts_with("Prop_"),
+               names_to = "Sex",
+               values_to = "Proportion") |>
+  mutate(Sex = str_remove(Sex, "Prop_"))
+
+ggplot(Heart_Plot_Sex_Data, aes(x = `Transplant Year`, y = Proportion, fill = Sex)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), breaks = seq(0, 1, by = 0.1)) +
+  labs(title = "Proportion of Heart Transplant Recipients by Sex",
+       y = "Proportion",
+       x = "Year") +
+  theme_minimal()
+```
+
+```{r}
+#| label: Heart recipients by race
+
+Heart_Plot_Race_Data <- Heart_Recipients |>
+  select(`Transplant Year`:`Organ Transplanted`, Prop_White:Prop_Multiracial) |>
+  pivot_longer(cols = starts_with("Prop_"),
+               names_to = "Race",
+               values_to = "Proportion") |>
+  mutate(Race = str_remove(Race, "Prop_")) |>
+  filter(!Race %in% c("Multiracial", "Native Hawaiian", "American Indian"))
+
+ggplot(Heart_Plot_Race_Data, aes(x = `Transplant Year`, y = Proportion, fill = Race)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), breaks = seq(0, 1, by = 0.1)
+                     ) +
+  labs(title = "Proportion of Heart Transplant Recipients by Race",
+       y = "Proportion",
+       x = "Year") +
+  theme_minimal()
+```
+
+
+## Liver Allocation
+```{r}
+#| label: Livers recipients by sex
+
+Liver_Plot_Sex_Data <- Deceased_v_Living_Liver_Recipients |>
+  select(`Transplant Year`:`Organ Transplanted`, Prop_Male, Prop_Female) |>
+  pivot_longer(cols = starts_with("Prop_"),
+               names_to = "Sex",
+               values_to = "Proportion") |>
+  mutate(Sex = str_remove(Sex, "Prop_"))
+
+
+ggplot(Liver_Plot_Sex_Data, aes(x = `Transplant Year`, y = Proportion, fill = Sex)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ `Donor Type`) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), breaks = seq(0, 1, by = 0.1)
+                     ) +
+  labs(title = "Proportion of Liver Transplant Recipients by Sex",
+       y = "Proportion",
+       x = "Year") +
+  theme_minimal()
+
+# It appear that males get deceased donor kidneys more often than females
+```
+
+```{r, warning = FALSE}
+#| label: Liver recipients by race
+
+Liver_Plot_Race_Data <- Deceased_v_Living_Liver_Recipients |>
+  select(`Transplant Year`:`Organ Transplanted`, Prop_White:Prop_Multiracial) |>
+  pivot_longer(cols = starts_with("Prop_"),
+               names_to = "Race",
+               values_to = "Proportion") |>
+  mutate(Race = str_remove(Race, "Prop_")) |>
+  filter(!Race %in% c("Multiracial", "Native Hawaiian", "American Indian"))
+
+
+ggplot(Liver_Plot_Race_Data, aes(x = `Transplant Year`, y = Proportion, fill = Race)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ `Donor Type`) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), breaks = seq(0, 1, by = 0.1)
+                     ) +
+  labs(title = "Proportion of Liver Transplant Recipients by Race",
+       y = "Proportion",
+       x = "Year") +
+  theme_minimal()
+```
+
+
+## Kidney Allocation
+```{r}
+#| label: Kidney recipients by sex
+
+Kidney_Plot_Sex_Data <- Deceased_v_Living_Kidney_Recipients |>
+  select(`Transplant Year`:`Organ Transplanted`, Prop_Male, Prop_Female) |>
+  pivot_longer(cols = starts_with("Prop_"),
+               names_to = "Sex",
+               values_to = "Proportion") |>
+  mutate(Sex = str_remove(Sex, "Prop_"))
+
+
+ggplot(Kidney_Plot_Sex_Data, aes(x = `Transplant Year`, y = Proportion, fill = Sex)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ `Donor Type`) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), breaks = seq(0, 1, by = 0.1)
+                     ) +
+  labs(title = "Proportion of Kidney Transplant Recipients by Sex",
+       y = "Proportion",
+       x = "Year") +
+  theme_minimal()
+
+# It appear that males get deceased donor kidneys more often than females
+```
+
+```{r, warning = FALSE}
+#| label: Kidney recipients by race
+
+Kidney_Plot_Race_Data <- Deceased_v_Living_Kidney_Recipients |>
+  select(`Transplant Year`:`Organ Transplanted`, Prop_White:Prop_Multiracial) |>
+  pivot_longer(cols = starts_with("Prop_"),
+               names_to = "Race",
+               values_to = "Proportion") |>
+  mutate(Race = str_remove(Race, "Prop_")) |>
+  filter(!Race %in% c("Multiracial", "Native Hawaiian", "American Indian"))
+
+ggplot(Kidney_Plot_Race_Data, aes(x = `Transplant Year`, y = Proportion, fill = Race)) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ `Donor Type`) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), breaks = seq(0, 1, by = 0.1)
+                     ) +
+  labs(title = "Proportion of Kidney Transplant Recipients by Race",
+       y = "Proportion",
+       x = "Year") +
+  theme_minimal()
+```
+
+
+### Cardiovascular
+```{r}
+#| label: Testing for a difference in cardiovascular disease mortality by race
+
+print(Cardiovascular_Disease_Mortality_Burden_Race)
+
+# Pivoting to long
+Cardiovascular_Disease_Mortality_Burden_Race_Test <- Cardiovascular_Disease_Mortality_Burden_Race |>
+  pivot_longer(
+    cols = `1997`:`2019`,
+    names_to = "Year",
+    values_to = "Prevalence"
+  ) 
+
+print(Cardiovascular_Disease_Mortality_Burden_Race_Test)
+
+# Hypotheses:
+# H0: Mean cardiovascular disease mortality is the same across racial groups
+# H1: Mean cardiovascular disease mortality differs between at least one pair of racial groups
+
+ANOVA_Cardiovascular_Disease_Mortality_Burden_Race <- aov(as.numeric(Prevalence) ~ Race, data = Cardiovascular_Disease_Mortality_Burden_Race_Test)
+
+summary(ANOVA_Cardiovascular_Disease_Mortality_Burden_Race)
+
+# Conclusion: There are significant differences in cardiovascular disease mortality between at least one pair of racial groups
+
+Cardiovascular_Disease_Mortality_Burden_Race_Test %>%
+  group_by(Race) %>%
+  summarise(
+    count = n(),
+    mean = base::mean(as.numeric(Prevalence), na.rm=TRUE),
+    sd = stats::sd(as.numeric(Prevalence), na.rm=TRUE),
+    min = base::min(as.numeric(Prevalence), na.rm=TRUE),
+    max = base::max(as.numeric(Prevalence), na.rm=TRUE)
+  )
+```
+
+### Liver
+```{r}
+#| label: Testing for a difference in liver disease mortality by race
+
+print(Liver_Disease_Mortality_Burden_Race)
+
+# Pivoting to long
+Liver_Disease_Mortality_Burden_Race_Test <- Liver_Disease_Mortality_Burden_Race |>
+  pivot_longer(
+    cols = `1997`:`2019`,
+    names_to = "Year",
+    values_to = "Prevalence"
+  ) |>
+  rename(Race = Characteristic)
+
+print(Liver_Disease_Mortality_Burden_Race_Test)
+
+# Summary statistics by Race
+Liver_Disease_Mortality_Burden_Race_Test |>
+  group_by(Race) |>
+  summarise(
+    count = n(),
+    mean = base::mean(Prevalence, na.rm = TRUE),
+    sd = stats::sd(Prevalence, na.rm = TRUE),
+    min = base::min(Prevalence, na.rm = TRUE),
+    max = base::max(Prevalence, na.rm = TRUE)
+  ) |> print()
+
+# Hypotheses:
+# H0: Mean liver disease mortality is the same across racial groups
+# H1: Mean liver disease mortality differs between at least one pair of racial groups
+
+ANOVA_Liver_Disease_Mortality_Burden_Race <- aov(as.numeric(Prevalence) ~ Race, data = Liver_Disease_Mortality_Burden_Race_Test)
+
+summary(ANOVA_Liver_Disease_Mortality_Burden_Race)
+
+# Conclusion: There are significant differences in liver disease mortality between among at least one pair of racial groups
+
+```
+
+### Kidney
+```{r}
+#| label: Testing for a difference in kidney disease mortality by race
+
+print(Kidney_Disease_Mortality_Burden_Race)
+
+# Pivoting to long
+Kidney_Disease_Mortality_Burden_Race_Test <- Kidney_Disease_Mortality_Burden_Race |>
+  pivot_longer(
+    cols = `1997`:`2019`,
+    names_to = "Year",
+    values_to = "Prevalence"
+  ) |>
+  rename(Race = Characteristic)
+
+print(Kidney_Disease_Mortality_Burden_Race_Test)
+
+# Summary statistics by Race
+Kidney_Disease_Mortality_Burden_Race_Test |>
+  group_by(Race) |>
+  summarise(
+    count = n(),
+    mean = base::mean(Prevalence, na.rm = TRUE),
+    sd = stats::sd(Prevalence, na.rm = TRUE),
+    min = base::min(Prevalence, na.rm = TRUE),
+    max = base::max(Prevalence, na.rm = TRUE)
+  ) |> print()
+
+# Hypotheses:
+# H0: Mean kidney disease mortality is the same across racial groups
+# H1: Mean kidney disease mortality differs between at least one pair of racial groups
+
+ANOVA_Kidney_Disease_Mortality_Burden_Race_Test <- aov(as.numeric(Prevalence) ~ Race, data = Kidney_Disease_Mortality_Burden_Race_Test)
+
+summary(ANOVA_Kidney_Disease_Mortality_Burden_Race_Test)
+
+# Conclusion: There are significant differences in kidney disease mortality between among at least one pair of racial groups
+```
+
